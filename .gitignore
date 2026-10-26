@@ -1,0 +1,18 @@
+# Proprietary downloads, raw captures, device identities, and derived analysis
+/artifacts/
+/captures/
+/local/
+*.exe
+*.dll
+*.msi
+*.pdb
+*.btsnoop
+*.pcap
+*.pcapng
+*.saz
+*.har
+*.pyc
+__pycache__/
+.venv/
+/target/
+.DS_Store

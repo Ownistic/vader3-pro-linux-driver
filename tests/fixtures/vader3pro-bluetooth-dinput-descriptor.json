@@ -1,0 +1,15 @@
+{
+  "kind": "recorded-hid-report-descriptor-not-input-reports",
+  "controller": "Flydigi Vader 3 Pro (owner-confirmed)",
+  "mode": "Bluetooth DInput, after owner mode switch and reconnection",
+  "firmware": null,
+  "bus": "0005",
+  "vendor": "d7d7",
+  "product": "0041",
+  "bluetooth_transport": "HID-over-GATT service objects observed; no packet trace",
+  "source": "read-only sysfs report_descriptor via tools/inventory.py",
+  "sanitization": "no Bluetooth address, serial, device name, physical path or host identity included",
+  "bytes": 163,
+  "sha256": "227924e94560bea5149d6a75a8bb225143a1e4b0685075dea729a30649bc1f22",
+  "hex": "05010905a1018501a10209300931093209351580257f3580457f7508950481020940094109420943150026ff007508950481027504950115012508463b0165140939814265000509950c7501250115000901090209040905090709080909090a090b090c090e090f8102050c0936098409b8099c099d0989098d09650982098a7501950f8102050c09697501950181020502150026ff0009c509c4950275088102c0c0"
+}
