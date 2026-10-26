@@ -200,6 +200,35 @@ as the vendor-mode switch. No FF descriptor or HID output report is involved.
 Whether the Bluetooth transport delivers such writes to the firmware remains
 **untested**.
 
+## Trigger haptics
+
+See [trigger rumble analysis](evidence/vader3pro-firmware-trigger-rumble.md).
+This is a **separate subsystem** from grip rumble, and the outcome is a negative
+result worth recording clearly.
+
+- The Vader 3 Pro **is advertised** as supporting trigger haptics: device ID 80
+  (`f3p`) is in the app's `TriggerVib` capability list, and
+  `TriggerViewModel.UpdatePageData` gates the entire trigger page on it.
+- Trigger haptics are **not** PWM on the main MCU. They go through a RAM pointer
+  table to a separate driver via a function-pointer peripheral transfer.
+- The app's trigger-vibration set command (`A5 30 08`, `K1CmdID` 48 /
+  `K1SubCmdSetTriggerVib` 8) is built and sent **only when
+  `ConnectMode == "XInput"`**. There is no DInput branch at all.
+- Firmware 6.7.5.1 has **no handler for `A5 30 08`**. The `0xA5` dispatcher
+  switches on `0x30`, but its inner chain covers `01 04 05 0b 0c 0d` only.
+- `05 A0` — the adaptive-trigger command the app *does* send on DInput — is a
+  **no-op**: it compares and branches straight to the function epilogue.
+
+So on this firmware/transport combination both halves are missing: the host
+never sends a trigger-haptic command over DInput, and the firmware has no
+handler for the one it would send over XInput. `05 50 02` / `05 50 03` **are**
+implemented (driver write + 3000-tick counter) and are the more promising entry
+point if trigger haptics turn out to be reachable at all.
+
+**Correction to an earlier claim in this ledger:** `0x50` *is* present in
+`FUN_00018138`. A previous note said it was not; that came from a byte-scan bug
+(wrong `tcmp` mask) compounded by the decompiler rendering `0x50` as `'P'`.
+
 ## Required transport inventory
 
 For each controller mode, record firmware, Bluetooth Classic HID versus BLE/HOGP,
