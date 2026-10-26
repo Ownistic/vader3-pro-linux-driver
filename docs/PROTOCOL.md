@@ -92,7 +92,7 @@ Multi-button simultaneity, release-edge behavior, and mode/initialization
 commands are still unverified; rumble and Steam Input runtime behavior remain
 untested.
 
-## Space Station 3.4.4.3 static analysis (new)
+## Space Station 3.4.4.3 static analysis
 
 See [space-station static analysis](evidence/space-station-static-analysis.md).
 Installer extracted with innoextract 1.10-dev (the packaged 1.9 cannot parse
@@ -120,9 +120,32 @@ Transferable protocol findings:
   `0x04B4/0x04B5:0x2410–0x2415`, and its BLE wrapper is used only for the BS1
   cooler. Command formats transfer; the transport does not.
 
-**Correction carried into `docs/PROTOCOL.md`:** M1–M4 are distinct byte-11 bits
+**Correction carried into this ledger:** M1–M4 are distinct byte-11 bits
 and the D-pad is a byte-9 low-nibble hat; they are separate fields. The earlier
 "M keys duplicate D-pad bits" claim was wrong and is now retracted.
+
+## Vader 3 Pro firmware (acquired, unflashed)
+
+Official firmware **is** downloadable: Space Station fetches it from an
+unauthenticated FlyDigi endpoint rather than bundling it. See
+[firmware acquisition](evidence/vader3pro-firmware-acquisition.md).
+`type=f3` yields `Vader 3 Pro main MCU 6.7.5.1`
+(`Telink87_For_F3_Ver6.7.5.1.bin`, 152068 B, SHA-256
+`6cba30540a0c3ba16acad2b62bb4dd64dfccc28add04914c3720c6ae6a53e20a`);
+`type=F3SI` yields the 3.0.2 ext-chip image; `type=F3DONGLE` the 0.4.1.7
+dongle image.
+
+The main image contains the controller's own HID descriptors. At `0x23764`
+there is a 163-byte descriptor that is **byte-identical** to the one captured
+from the live Bluetooth `d7d7:0041` device (same SHA-256
+`227924e94560bea5149d6a75a8bb225143a1e4b0685075dea729a30649bc1f22`), which
+independently validates the captured fixture. Declared layout: abs bytes 1–4
+four 8-bit axes, 5–8 four further 8-bit `Vx/Vy/Vbrx/Vbry` axes, byte 9 a 4-bit
+hat, bytes 9–10 twelve buttons, bytes 11–12 sixteen consumer-page bits, bytes
+13–14 Brake/Accelerator. Bytes 5–8 were `0x00` in all seven captures, so those
+declared axes are unused in this personality — consistent with gyro living only
+in the vendor-mode report. The image also carries an Xbox-style descriptor at
+`0x24098` (input+output+feature), i.e. the rumble-capable personality.
 
 ## Required transport inventory
 
