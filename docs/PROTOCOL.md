@@ -52,8 +52,8 @@ evidence doc):
 | L3 / R3 | byte 10 `0x40` / `0x80` |
 | Home | byte 12 `0x80` |
 | C / Z | byte 11 `0x01` / `0x02` |
-| D-pad Up/Right/Down/Left | byte 11 `0x04` / `0x08` / `0x10` / `0x20` |
-| M1/M2/M3/M4 | byte 11 `0x04`/`0x08`/`0x10`/`0x20` — identical to D-pad bits; indistinguishable from the D-pad in this mode (owner-confirmed isolated presses) |
+| D-pad Up/Right/Down/Left | byte 9 **low nibble** hat: `1` / `3` / `5` / `7` (0 = neutral) |
+| M1 / M2 / M3 / M4 | byte 11 `0x04` / `0x08` / `0x10` / `0x20` |
 
 Sticks: byte 1/2 = left stick X/Y, byte 3/4 = right stick X/Y. Left-stick
 full-left hold = byte 1 `0x80` plateau, full-right = `0x7f`; forward = byte 2
@@ -66,12 +66,63 @@ A whole-controller shake test produced no large byte 1–4 swings: the passive
 ID-1 stream does not visibly carry gyro/accelerometer data. Native gyro likely
 requires a vendor-mode output command; untested.
 
-Session-5 M-key result conflicts with neither C/Z (which remain byte 11
-`0x01`/`0x02`); note byte 11 `0x04`–`0x20` are shared D-pad/M bits exactly as
-captured. Byte 9 low bits `0x01`–`0x07` appeared only in session 1, 92–110 s,
-with no source assignment. Multi-button simultaneity, release-edge behavior,
-and mode/initialization commands are still unverified; rumble and Steam Input
-runtime behavior remain untested.
+**Correction to an earlier entry.** M1–M4 and the D-pad are **separate fields**, not
+shared bits. An earlier version of this table listed both on byte 11 and called
+them indistinguishable; that was wrong. Re-analysis of the raw captures:
+
+- Session 5 (owner-confirmed M1–M4 presses, no D-pad) → byte 11
+  `0x04`/`0x08`/`0x10`/`0x20` while byte 9's low nibble stayed `0x00` for all
+  25 frames.
+- Session 3 (D-pad only) → byte 9 low nibble `1`/`3`/`5`/`7` while byte 11
+  stayed `0x00`.
+- Session 1 exercised both, but sequentially: D-pad at 80–86 s, M keys at
+  105–107 s. No frame anywhere in the seven captures has both fields non-zero.
+
+So the D-pad is a hat in byte 9's low nibble and M1–M4 are discrete bits in
+byte 11. The per-M-key bit order below matches FlyDigi's own key table
+(M1=`0x04`, M2=`0x08`, M3=`0x10`, M4=`0x20`), but the owner could not confirm
+which physical key was pressed when, so the *assignment* is table-derived
+rather than owner-confirmed. Its consequence for the project is positive: all
+six extra buttons are independently readable in plain DInput, so Steam Input
+can receive M1–M4 as distinct buttons without any vendor-mode switch.
+
+Byte 9 low nibble idle value is `0` in every idle frame of every session, so it
+behaves like a clean neutral hat rather than a session-centering axis.
+Multi-button simultaneity, release-edge behavior, and mode/initialization
+commands are still unverified; rumble and Steam Input runtime behavior remain
+untested.
+
+## Space Station 3.4.4.3 static analysis (new)
+
+See [space-station static analysis](evidence/space-station-static-analysis.md).
+Installer extracted with innoextract 1.10-dev (the packaged 1.9 cannot parse
+Inno Setup 6.3); assemblies decompiled with ILSpy 11.1.0. Nothing executed.
+Transferable protocol findings:
+
+- Vendor/config commands are 15-byte blobs `05 <subcmd> <payload…> <sum>` where
+  the last byte is the running additive checksum. `05 0F <L> <R>` is a motor
+  test/rumble command with 0–255 levels; `05 EE 01` enables "origin" (vendor)
+  mode and `05 EE 00` restores normal DInput reporting.
+- In vendor mode the device emits 32-byte `04 FE …` frames. Space Station maps
+  byte 17/19/21/22 → sticks, 9/10 → buttons, 23/24 → analog triggers, 7 → the
+  `C, Z, M1–M6` byte, and **bytes 4/5/6 → 12-bit packed gyro X and Y**. The
+  passive 21-byte stream carries no motion at all, which explains the failed
+  shake test.
+- Key order table: index 16–21 = C, Z, M1, M2, M3, M4. That table is what gives
+  byte 11 bits `0x04`/`0x08`/`0x10`/`0x20` their M1–M4 meaning.
+- Device configs are JSON (`app/default/device_f3/config.fdg`). The shipped
+  Vader 3 Pro default remaps `C→THUMBL`, `Z→THUMBR`, `M1→UP`, `M2→DOWN`,
+  `M3→RIGHT`, `M4→LEFT` — i.e. the stock profile *forwards* those keys to D-pad
+  outputs. That profile, not the report layout, is why they looked merged.
+  Serialised form is a 76-byte payload with a 96-byte key map (32 ×
+  `{targetKeyId, turboType, turboCount}`) at offset 13.
+- Space Station never targets `d7d7`: its HID matching lists `0x045E:0x028E` and
+  `0x04B4/0x04B5:0x2410–0x2415`, and its BLE wrapper is used only for the BS1
+  cooler. Command formats transfer; the transport does not.
+
+**Correction carried into `docs/PROTOCOL.md`:** M1–M4 are distinct byte-11 bits
+and the D-pad is a byte-9 low-nibble hat; they are separate fields. The earlier
+"M keys duplicate D-pad bits" claim was wrong and is now retracted.
 
 ## Required transport inventory
 
@@ -89,11 +140,11 @@ Bluetooth HID bus `0005` alone does not distinguish Classic from BLE.
 | LT/RT | byte 10 `0x04`/`0x08` + analog byte 13/14 (0x01→0xff) | Session-4 isolation; Steam untested |
 | Home | byte 12 `0x80` | Session-4 isolation |
 | C/Z | byte 11 `0x01`/`0x02` | Sessions 1/4 |
-| D-pad; M1–M4 | byte 11 `0x04`/`0x08`/`0x10`/`0x20` (M keys duplicate these bits) | Session-5 owner-confirmed; M indistinguishable from D-pad |
+| D-pad | byte 9 low-nibble hat `1`/`3`/`5`/`7` (0 = neutral) | Sessions 1/3; independent of byte 11 |
+| M1–M4 | byte 11 `0x04`/`0x08`/`0x10`/`0x20` | Session-5 isolation; distinct from D-pad |
 | LX/LY/RX/RY | byte 1/2/3/4; extremes `0x80` and `0x7f`, idle ≈ `0xfd` | Session-6 click-shake isolation + held plateaus |
 | Gyro XYZ and accelerometer XYZ | Not present in passive ID-1 stream (shake test) | Untested; likely vendor command required |
 | Rumble channels/strength/duration | Unknown Bluetooth output or feature command | Untested |
-| byte 9 low bits | `0x01`-`0x07` seen once (session 1, 92–110 s) | Unassigned |
 | Simultaneous inputs | Not yet exercised | Untested |
 
 Observed DInput descriptor field order (not yet mapped against physical reports):

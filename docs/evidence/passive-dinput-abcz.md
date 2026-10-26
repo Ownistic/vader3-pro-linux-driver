@@ -90,11 +90,31 @@ and Gaming/Desktop Steam acceptance remain unresolved.
 Update: seven sessions now exist. Full button map decoded (see protocol ledger
 update in docs/PROTOCOL.md). Key findings beyond this file's original A/B/C/Z
 evidence: LT/RT are true analog (byte 13/14); Select=`0x10`/Start=`0x20`
-byte 10 (session-6 disambiguation); Home = byte 12 `0x80`; M1–M4 emit D-pad
-duplicate bits on byte 11 (byte 11 `0x04`+bits); sticks live on bytes 1–4 with
-left/forward extreme = `0x80`, right = `0x7f`. M buttons are NOT separately
-addressable in passive DInput; the six-extra-button PRD goal cannot use this
-report layout without vendor mode or remapping.
+byte 10 (session-6 disambiguation); Home = byte 12 `0x80`; the D-pad is a hat
+in byte 9's **low nibble** (`1`/`3`/`5`/`7` = Up/Right/Down/Left); M1–M4 are
+discrete bits in byte 11 (`0x04`/`0x08`/`0x10`/`0x20`); sticks live on bytes
+1–4 with left/forward extreme = `0x80`, right = `0x7f`.
+
+### Correction: M1–M4 are independently readable
+
+An earlier revision of this file and of `docs/PROTOCOL.md` stated that M1–M4
+emit the same bits as the D-pad and were therefore indistinguishable. That was
+**wrong**, and the raw captures refute it directly:
+
+| evidence | D-pad field (byte 9 low nibble) | byte 11 |
+| --- | --- | --- |
+| session 5, owner-confirmed M1–M4 only, 25 frames | `0x00` in every frame | `0x04`/`0x08`/`0x10`/`0x20` (one per press) |
+| session 3, D-pad only, 783 frames | `1`/`3`/`5`/`7` | `0x00` in every frame |
+| session 1, both exercised, 872 frames | `1`/`3`/`5`/`7` at 80–86 s | `0x04`–`0x20` at 105–107 s |
+
+No frame in any of the seven captures has both fields non-zero, and the two
+fields change at different times in session 1. The D-pad and M1–M4 are separate
+fields; the M keys are independently addressable in passive DInput, so the
+six-extra-button goal does not require a vendor-mode switch. The per-key bit
+order matches FlyDigi's own key table but the owner could not confirm which
+physical key was pressed when, so the assignment is table-derived, not
+owner-confirmed. An isolated recapture pressing one named M key at a time would
+settle it.
 
 
 ## Session 5-7 DInput captures (latest)
