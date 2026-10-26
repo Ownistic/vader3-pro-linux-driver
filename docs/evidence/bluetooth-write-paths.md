@@ -183,6 +183,11 @@ observable device response**. Whether NUS reaches the `FUN_00018828` dispatcher
 at all is unresolved; the frames may be consumed by the OTA state machine
 before reaching it, or NUS may require an OTA session to be opened first.
 
+**Resolved** by [bluetooth-queue-topology.md](bluetooth-queue-topology.md): the
+`5A A5` envelope is device-to-host, `FUN_0001896c` is a transmit helper, and the
+inbound command queue's only producer is the wired USB frame validator. Bluetooth
+has no path into the command dispatcher on this build.
+
 ## Superseded claims
 
 Two statements made earlier in this project are withdrawn:
@@ -193,6 +198,13 @@ Two statements made earlier in this project are withdrawn:
    controller to keep it awake. Vendor mode was never entered. The M1-in-byte-7
    signature of vendor mode was never observed over Bluetooth.
 
+3. *"`FUN_0001896c` accepts only `5A A5` frames, so commands must be sent with
+   that envelope over Bluetooth."* Wrong direction. `FUN_0001896c` is the
+   firmware's own **transmit** helper: `FUN_0000fd7c` builds
+   `5A A5 A5 41 <seq> <len16> <payload> 02` and queues it for notification. The
+   wrapped-frame experiments were built on this mistaken reading. See
+   [bluetooth-queue-topology.md](bluetooth-queue-topology.md).
+
 2. *"Bluetooth has no working output path, and the descriptor's lack of an
    output report makes rumble doubtful."* The descriptor fact is correct and
    now firmly established, but the conclusion drawn from it was premature: the
@@ -201,10 +213,14 @@ Two statements made earlier in this project are withdrawn:
 
 ## Open questions
 
-- Does NUS RX reach `FUN_00018828`, and if not, which handler consumes it?
+- ~~Does NUS RX reach `FUN_00018828`, and if not, which handler consumes it?~~
+  Resolved: see [bluetooth-queue-topology.md](bluetooth-queue-topology.md).
 - Does an OTA session need to be opened before NUS accepts command frames?
+  Moot for commanding the device, since NUS writes do not reach the dispatcher.
 - Would the HID report characteristic service writes if BlueZ transmitted them?
 - Is the installed firmware the same build analysed here (6.7.5.1)?
+- Does the Bluetooth **XInput** personality (six declared output reports) expose a
+  command channel that DInput does not?
 
 ## Reproduction
 

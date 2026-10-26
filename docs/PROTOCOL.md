@@ -214,13 +214,16 @@ Two corrections to earlier notes in this ledger:
 
 Whether the **Bluetooth** transport delivers such writes to the firmware is
 covered separately in
-[Bluetooth write paths](evidence/bluetooth-write-paths.md). Summary: the BT
-DInput descriptor declares no output report, so a `05`-framed hidraw write is
+[Bluetooth write paths](evidence/bluetooth-write-paths.md) and
+[queue topology](evidence/bluetooth-queue-topology.md). Summary: the BT DInput
+descriptor declares no output report, so a `05`-framed hidraw write is
 unconditionally "accepted" and proves nothing; BlueZ refuses HID-service GATT
 writes locally (verified with `btmon`: no ATT write reaches the air); the vendor
-`1A12` characteristic disconnects the controller on every frame tried; and the
-Nordic UART (`OTA`) service accepts writes without effect. Bluetooth rumble is
-**not solved**.
+`1A12` characteristic disconnects the controller on every frame tried; the
+Nordic UART (`OTA`) service accepts writes without effect; and on firmware
+6.7.5.1 the inbound command queue is fed **only** by the wired USB frame
+validator, so Bluetooth has no path to the command dispatcher. Bluetooth rumble
+is **not possible without a device-side change** on this build.
 
 ## Trigger haptics
 
