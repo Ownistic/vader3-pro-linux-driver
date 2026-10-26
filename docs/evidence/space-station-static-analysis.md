@@ -101,29 +101,51 @@ The key point for the project: in vendor mode byte 7 carries the same
 `gamePadKey[2, 8]` table, and bytes 4–6 carry 12-bit angular-rate data that the
 passive stream does not contain at all.
 
-The 12-bit unpack, from `KeyMouDataParse.handleMotionData`, differs by device
-generation. For firmware reported as "new motion":
+The 12-bit unpack, from `KeyMouDataParse.handleMotionData`. **This differs by
+both firmware generation and transport** — the earlier note that assumed one
+formula was wrong. The 32-byte frame is first renormalised by
+`XInputDataUtils.FormatDataFromDInput32` (`normalised[11..13] = vendor[4..6]`),
+then:
+
+For **DInput** (the Bluetooth DInput case), unconditionally and without
+consulting the origin-motion setting:
 
 ```
-gyroX = b11 | ((b13 & 0xF0) << 4);  if (gyroX & 0x800) gyroX -= 4095
-gyroY = b12 | ((b13 & 0x0F) << 8);  if (gyroY & 0x800) gyroY -= 4095
+gyroX = n11 | ((n12 & 0x0F) << 8);
+gyroY = (n13 << 4) | ((n12 & 0xF0) >> 4);
+sign-extend at 0x800 with -4095; then if value > 0, subtract 1
 ```
 
-For older firmware (`IsNewMotion == false`) it is 10-bit:
+For **XInput**, gated on `IsUseOriginMotionData` and firmware generation:
 
 ```
-gyroX = b11 | (((b13 >> 2) & 3) << 8);  sign-extend at 0x200 with -1024
-gyroY = b12 | ((b13 & 3) << 8);         sign-extend at 0x200 with -1024
+new motion (12-bit): gyroX = b11 | ((b13 & 0xF0) << 4)
+                     gyroY = b12 | ((b13 & 0x0F) << 8)
+                     sign-extend at 0x800 with -4095
+old firmware (10-bit): gyroX = b11 | (((b13 >> 2) & 3) << 8)
+                       gyroY = b12 | ((b13 & 3) << 8)
+                       sign-extend at 0x200 with -1024
 ```
 
 Note the asymmetries that matter for a reimplementation:
-- Vendor mode packs gyro X and Y into three bytes; the passive stream has
+- Nibble order is **not** the same on both paths: DInput splits X's high bits
+  into `b12 & 0x0F` and Y's into `n13<<4 | (n12&0xF0)>>4`, while XInput puts X
+  in the high nibble. Copying the wrong branch silently swaps axes and scale.
+- There is an unconditional `value--` on positive readings, i.e. a one-LSB
+  bias in the vendor code. Reproduce it to match Space Station exactly.
+- Vendor mode packs gyro into three bytes; the passive stream has
   **no** motion bytes at all, which is why the shake test moved nothing.
 - Whether a Bluetooth DInput unit honours `05 EE 01` and streams 32-byte vendor
   frames is **untested**. All of this is inference from the Windows USB/2.4 GHz
   path until it is tried over Bluetooth.
 - Gyro is only consumed when the config's `MotionMapping.MapType == 3`
   (`openMouse` gate); otherwise the service clears its motion flag.
+
+The firmware itself contains a matching 12-bit two-axis packer
+(`FUN_0001a6d0`), which proves the device packs motion as two 12-bit values in
+three bytes. Its nibble order is its own, so it is evidence of the packing
+width, not of the host-side vendor-frame offsets — see
+[vader3pro firmware disassembly](vader3pro-firmware-disassembly.md).
 
 ## Rumble
 

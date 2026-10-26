@@ -29,8 +29,10 @@ unverified. See [DInput evidence](evidence/bluetooth-dinput-mode.md) and
 ## Observed DInput input frames
 
 The coordinated capture contains 14 ID-1 reports, **21 bytes each**, versus
-15 bytes declared by the HID descriptor. Preserve the six additional bytes;
-all were zero in this small sample and their meaning is unknown.
+15 bytes declared by the HID descriptor. The firmware explains the difference:
+it builds a 20-byte payload and sends all 20, and only indices 0–13 are ever
+written, so bytes 15–20 are uninitialised padding rather than hidden data.
+Neither truncate to the descriptor length nor read meaning into the tail.
 
 Offsets include report ID at byte 0. In the owner-completed A/B/C/Z sequence:
 A = byte 9 mask `0x10`; B = byte 9 mask `0x20`; C = byte 11 mask `0x01`;
@@ -146,6 +148,33 @@ hat, bytes 9–10 twelve buttons, bytes 11–12 sixteen consumer-page bits, byte
 declared axes are unused in this personality — consistent with gyro living only
 in the vendor-mode report. The image also carries an Xbox-style descriptor at
 `0x24098` (input+output+feature), i.e. the rumble-capable personality.
+
+## Firmware disassembly (TC32)
+
+The main image was disassembled and decompiled; see
+[firmware disassembly](evidence/vader3pro-firmware-disassembly.md). Findings
+that change the ledger:
+
+- `0xEE` is handled by one function (`FUN_00018138`) and sets a **single RAM
+  flag byte** at state+0x2a. No handshake, no reply. When that flag is set the
+  input-report path branches to the key-mapping builder; when clear it takes
+  the plain path. The dispatcher's comparison chain matches the Windows
+  builder bytes (`0xE0`, `0xE2`, `0xE3`, `0xEB`, `0xEE`, `0xEF`, `0xF4`, `0xA0`)
+  one for one.
+- The button scatter code independently confirms the whole DInput byte map,
+  including **M1–M4 = byte 11 `0x04`/`0x08`/`0x10`/`0x20`** and the D-pad as a
+  hat in byte 9's low nibble. This is firmware-level proof, not inference from
+  captures.
+- **The 21-byte length is explained.** The report builder declares a 20-byte
+  payload, initialises only indices 0–13, and sends 20 payload bytes; indices
+  14–19 are never written. So 21 wire bytes are correct by construction and the
+  15-byte descriptor is stale. Bytes 15–20 are uninitialised padding, not
+  hidden data — parsers must neither truncate to the descriptor nor interpret
+  them.
+- The DInput gyro unpacking in the Windows service uses a **different nibble
+  split** from the XInput path and applies an unconditional `value--` on
+  positive readings. The earlier note that copied the XInput formula was
+  wrong for Bluetooth DInput; the corrected formula is in the disassembly doc.
 
 ## Required transport inventory
 
