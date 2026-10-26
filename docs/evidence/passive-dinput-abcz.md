@@ -67,7 +67,11 @@ commentary, not copied implementation or evidence that its FF claim is universal
   `/tmp/opencode/flydigi/passive-dinput-coordinated-dqsg8uzu.jsonl`.
 - Source size: **1,802 bytes**; SHA-256
   `2ad2b739ef459c92117cc2ea3b50a6710cec5e3bd0b9bec6773761496f6e27fe`.
-- Sanitized public fixture:
+- Three of the capture sources are session-only (`/tmp/opencode`):
+`hidraw-capture-itqlgkl2.jsonl` (161 reports, 31.4 s), `hidraw-capture-6ik4jjni.jsonl`
+(25 reports, 22.7 s), `hidraw-capture-w6m51s37.jsonl` (728 reports, 97.7 s) — see
+the dinput-decode notes saved in session for SHA-256 digests. Sanitized public
+ fixture:
   `../../tests/fixtures/vader3pro-bluetooth-dinput-abcz.json`, preserving every
   acquired packet and relative monotonic timestamp. No addresses, serials,
   node/host paths, wall-clock times, or unrelated device identities included.
@@ -81,3 +85,25 @@ Next capture: M1/M2/M3/M4 individually, then C+Z and all four rear buttons held
 together with releases. Coordinate the window first and preserve all bytes.
 Gyro enablement/scale/orientation, rumble commands, virtual identity, suppression,
 and Gaming/Desktop Steam acceptance remain unresolved.
+
+
+Update: seven sessions now exist. Full button map decoded (see protocol ledger
+update in docs/PROTOCOL.md). Key findings beyond this file's original A/B/C/Z
+evidence: LT/RT are true analog (byte 13/14); Select=`0x10`/Start=`0x20`
+byte 10 (session-6 disambiguation); Home = byte 12 `0x80`; M1–M4 emit D-pad
+duplicate bits on byte 11 (byte 11 `0x04`+bits); sticks live on bytes 1–4 with
+left/forward extreme = `0x80`, right = `0x7f`. M buttons are NOT separately
+addressable in passive DInput; the six-extra-button PRD goal cannot use this
+report layout without vendor mode or remapping.
+
+
+## Session 5-7 DInput captures (latest)
+
+| capture | reports | span s | sha256 (whole JSONL) |
+| --- | --- | --- | --- |
+| hidraw-capture-itqlgkl2.jsonl (Select/Start/L3/R3 isolation) | 161 | 31.4 | `683de65e7438baa8716b2ca3c58a41433384e81277d84ec7e28fb7d90167aff3` |
+| hidraw-capture-6ik4jjni.jsonl (M1-M4 single presses) | 25 | 22.7 | `4a7c2e51bc6506de375f5f6edc85ecb47409e922cd7b33d541ba6554cf428d0b` |
+| hidraw-capture-w6m51s37.jsonl (stick one-axis-at-a-time + shake) | 728 | 97.7 | `928a4bc1ac6edea5a3e60f98d474a5893b6577d86eebaea051c07962d37a3fa1` |
+
+All in `/tmp/opencode/` (session-only, not archival). Every input record was
+21 bytes, report ID `01`, bytes 15-20 zero.

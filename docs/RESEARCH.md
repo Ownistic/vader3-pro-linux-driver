@@ -1,7 +1,8 @@
 # Research ledger
 
-Status: **initial source triage, two Bluetooth descriptors, and one coordinated
-A/B/C/Z input capture**. No output commands or Steam behavior have been verified.
+Status: **initial source triage, two Bluetooth descriptors, and seven coordinated
+passive DInput input captures covering the full standard control map**. No output
+commands have been sent and no Steam behavior has been verified.
 See [input-capture evidence](evidence/passive-dinput-abcz.md). Protocol facts and independent code
 are kept separate; no upstream/proprietary implementation has been incorporated.
 

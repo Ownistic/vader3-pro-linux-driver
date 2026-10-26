@@ -38,6 +38,41 @@ Z = byte 11 mask `0x02`. Each had a distinct set/clear pair. These are
 sequence-associated observations, not a general parser or simultaneous-input
 proof. M1–M4, remaining inputs, motion and Steam-editor exposure are unverified.
 
+Six more owner-coordinated passive sessions followed the A/B/C/Z capture.
+Consolidated button map (each row confirmed by single-press isolation or a
+coordinated ordered batch; details and session provenance in the passive-capture
+evidence doc):
+
+| Control | Field / masks |
+| --- | --- |
+| A / B / X / Y | byte 9 `0x10` / `0x20` / `0x40` / `0x80` |
+| LB / RB | byte 10 `0x01` / `0x02` |
+| LT / RT | byte 10 `0x04` / `0x08`, analog level byte 13 / byte 14 ramping `0x01`→`0xff` |
+| Select / Start | byte 10 `0x10` / `0x20` |
+| L3 / R3 | byte 10 `0x40` / `0x80` |
+| Home | byte 12 `0x80` |
+| C / Z | byte 11 `0x01` / `0x02` |
+| D-pad Up/Right/Down/Left | byte 11 `0x04` / `0x08` / `0x10` / `0x20` |
+| M1/M2/M3/M4 | byte 11 `0x04`/`0x08`/`0x10`/`0x20` — identical to D-pad bits; indistinguishable from the D-pad in this mode (owner-confirmed isolated presses) |
+
+Sticks: byte 1/2 = left stick X/Y, byte 3/4 = right stick X/Y. Left-stick
+full-left hold = byte 1 `0x80` plateau, full-right = `0x7f`; forward = byte 2
+`0x80`; right stick behaves symmetrically (extremes `0x80`/`0x7f` observed).
+Idle bytes sit near `0xfd`–`0x01` and are session-dependent; treat reported
+values as signed-like centered bytes, calibrating on first idle frames.
+LT/RT analog levels ramp byte 13/byte 14 from `0x01` to `0xff` (true analog).
+
+A whole-controller shake test produced no large byte 1–4 swings: the passive
+ID-1 stream does not visibly carry gyro/accelerometer data. Native gyro likely
+requires a vendor-mode output command; untested.
+
+Session-5 M-key result conflicts with neither C/Z (which remain byte 11
+`0x01`/`0x02`); note byte 11 `0x04`–`0x20` are shared D-pad/M bits exactly as
+captured. Byte 9 low bits `0x01`–`0x07` appeared only in session 1, 92–110 s,
+with no source assignment. Multi-button simultaneity, release-edge behavior,
+and mode/initialization commands are still unverified; rumble and Steam Input
+runtime behavior remain untested.
+
 ## Required transport inventory
 
 For each controller mode, record firmware, Bluetooth Classic HID versus BLE/HOGP,
@@ -49,11 +84,17 @@ Bluetooth HID bus `0005` alone does not distinguish Classic from BLE.
 
 | Fields | Bluetooth layout / units | State |
 | --- | --- | --- |
-| A/B/X/Y; D-pad; LB/RB; Start/Select; Home/system | A/B fields above; remaining controls unknown | Partial raw observation; Steam untested |
-| LX/LY/RX/RY; L3/R3; LT/RT | Unknown | Untested |
-| M1/M2/M3/M4/C/Z | C/Z fields above; M1–M4 unknown; combinations need proof | Partial single-button raw observation; Steam untested |
-| Gyro XYZ and accelerometer XYZ | Unknown initialization, endian, scale, orientation, calibration/rate | Untested |
+| A/B/X/Y | byte 9 `0x10`-`0x80` | Isolated in captures 1/2; Steam untested |
+| LB/RB; Start/Select; L3/R3 | byte 10 `0x01`/`0x02`; `0x10`/`0x20`; `0x40`/`0x80` | Session-6 isolation; Steam untested |
+| LT/RT | byte 10 `0x04`/`0x08` + analog byte 13/14 (0x01→0xff) | Session-4 isolation; Steam untested |
+| Home | byte 12 `0x80` | Session-4 isolation |
+| C/Z | byte 11 `0x01`/`0x02` | Sessions 1/4 |
+| D-pad; M1–M4 | byte 11 `0x04`/`0x08`/`0x10`/`0x20` (M keys duplicate these bits) | Session-5 owner-confirmed; M indistinguishable from D-pad |
+| LX/LY/RX/RY | byte 1/2/3/4; extremes `0x80` and `0x7f`, idle ≈ `0xfd` | Session-6 click-shake isolation + held plateaus |
+| Gyro XYZ and accelerometer XYZ | Not present in passive ID-1 stream (shake test) | Untested; likely vendor command required |
 | Rumble channels/strength/duration | Unknown Bluetooth output or feature command | Untested |
+| byte 9 low bits | `0x01`-`0x07` seen once (session 1, 92–110 s) | Unassigned |
+| Simultaneous inputs | Not yet exercised | Untested |
 
 Observed DInput descriptor field order (not yet mapped against physical reports):
 four signed 8-bit axes; four additional unsigned 8-bit Generic Desktop fields;

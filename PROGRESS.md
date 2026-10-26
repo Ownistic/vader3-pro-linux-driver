@@ -143,3 +143,36 @@ before selecting runtime architecture. Do not implement a guessed Bluetooth pars
   Only this factual result was added after verification; Phase 01 not closed.
   Unrelated untracked
   `.cortexkit/` belongs to the tooling/user environment and is left untouched.
+
+
+## Session 5-7 capture increment: full DInput control map
+
+Owner ran four more coordinated capture batches back-to-back (stop-on-"done",
+read-only, no output commands). Tooling: the saved reusable recorder
+`tools/capture_reports.py` (argparse: `--vid/--pid/--node/--max-seconds/--max-reports/--out/--correlation-id`).
+
+- Session 4 (LT/RT/Home/C/Z): LT = byte10 `0x04` + byte13 analog ramp
+  `0x01`→`0xff` (true analog, 90 sample steps on a slow press); RT = byte10
+  `0x08` + byte14; Home = byte12 `0x80` (isolated); C/Z reconfirmed byte11
+  `0x01`/`0x02`.
+- Session 5 (M1-M4 isolated, owner-confirmed presses): M1/M2/M3/M4 emit byte11
+  `0x04`/`0x08`/`0x10`/`0x20` — identical to the D-pad bits. In passive DInput,
+  the M keys cannot be distinguished from the D-pad. Session-1 byte10
+  `0x10`–`0x80` attribution to M1–M4 was wrong: those were Start/Select/L3/R3.
+- Session 6 (isolation): Select = byte10 `0x10`, Start = byte10 `0x20`,
+  L3 = byte10 `0x40` (+ byte1/2 stick wiggle), R3 = byte10 `0x80` (+ byte3/4).
+- Session 7 (sticks one axis at a time + shake): byte1/2/3/4 = LX/LY/RX/RY.
+  LX full-left hold = `0x80` plateau; LX full-right = `0x7f`; LY full-forward =
+  `0x80`; right stick symmetric. Idle bytes depend on session (near `0xfd`),
+  i.e. values behave like signed, session-recalibrated center. Whole-controller
+  shake produced no large byte1-4 swings ⇒ passive ID-1 stream carries no gyro;
+  native gyro likely requires a vendor output command (unsent).
+- Session-1 byte9 low bits `0x01`–`0x07` remain unassigned (occurred 92–110 s,
+  unrequested touches).
+
+Evidence policy: raw JSONLs stay outside Git (`/tmp/opencode/hidraw-capture-{ni7k4w80,_rr2qmvl,6ik4jjni,itqlgkl2,w6m51s37}.jsonl`;
+digests in `docs/evidence/passive-dinput-abcz.md` and project memory). Decoded
+facts merged into `docs/PROTOCOL.md` ledger and the passive-capture evidence doc.
+Phase 01 remains incomplete: no rumble/gyro/Steam/simultaneity/mode-switch
+evidence yet. Next: vendor-mode/extra-button research (PRD blocker), rumble
+command discovery, then Steam runtime experiments.
