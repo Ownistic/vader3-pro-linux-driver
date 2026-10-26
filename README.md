@@ -43,8 +43,8 @@ available controller mode, and record the mode/firmware separately. See
 - `docs/phases/`: scoped setup and feasibility gates.
 - `docs/evidence/`: retention rules and acquisition record.
 - `tools/`: independent read-only development diagnostics, not a runtime daemon.
-- `tests/`: synthetic sysfs tests and two real, sanitized descriptor fixtures;
-  no live input-report captures or functional hardware test claims.
+- `tests/`: synthetic sysfs tests, two real descriptor fixtures, and a sanitized
+  owner-coordinated Bluetooth A/B/C/Z capture; no Steam acceptance claim.
 
 ## Safety and deployment status
 

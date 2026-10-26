@@ -1,7 +1,8 @@
 # Research ledger
 
-Status: **initial source triage and two real Bluetooth descriptors**. No live
-input/output packet or Steam behavior has been verified on the target hardware. Protocol facts and independent code
+Status: **initial source triage, two Bluetooth descriptors, and one coordinated
+A/B/C/Z input capture**. No output commands or Steam behavior have been verified.
+See [input-capture evidence](evidence/passive-dinput-abcz.md). Protocol facts and independent code
 are kept separate; no upstream/proprietary implementation has been incorporated.
 
 ## Initial comparison
@@ -87,9 +88,11 @@ Current-page linkage, trusted publisher verification, extraction, and relevant
 ## Lowest-risk next experiment
 
 1. Preserve the [first Xbox-compatible Bluetooth descriptor](evidence/bluetooth-xbox-mode.md),
-   and [DInput descriptor/GATT comparison](evidence/bluetooth-dinput-mode.md), then obtain
-   neutral/single-button reports before selecting a parser. Node read access
-   is currently denied; do not broaden privileges to work around it.
+   [DInput descriptor/GATT comparison](evidence/bluetooth-dinput-mode.md), and
+   [first A/B/C/Z capture](evidence/passive-dinput-abcz.md). Continue M1–M4,
+   combined-input and standard-control captures before selecting a parser.
+   Owner-authorized read-only ACL enabled the first capture; recheck scoped
+   access after reconnection rather than broadening privileges.
 2. In parallel with static analysis, evaluate padctl's native protocol options
    against six-extra/motion requirements; do not treat generic evdev or separate
    sensor enumeration as satisfying Steam.

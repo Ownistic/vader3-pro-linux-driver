@@ -52,8 +52,9 @@ saved in `PRD.md` before other project files. Scope/checks/results:
 ## Blockers / untested requirements
 
 No default-vendor device was found by the initial sysfs probe (later DInput
-connection was found and documented below); no live target reports or
-real Steam experiment exist. All F1–F5/A1–A11 remain untested. Bluetooth rumble
+connection was found and documented below). The later passive checkpoint has
+14 coordinated raw input reports; no real Steam experiment exists. All full
+F1–F5/A1–A11 acceptance checks remain untested. Bluetooth rumble
 is unresolved, not proven impossible. Phase 01 is incomplete. Project license
 selection remains open; no runtime deployment/permissions/service is installed.
 
@@ -105,7 +106,40 @@ selection remains open; no runtime deployment/permissions/service is installed.
 
 ## Next action
 
-For live Phase 01, obtain owner-authorized, narrowly scoped
-read access to the rediscovered target node, then passive input captures. Continue
+For live Phase 01, coordinate M1/M2/M3/M4 singles plus C+Z and all four rear
+buttons held together/releases, then remaining standard axes/buttons and motion.
+Rediscover node and recheck read-only access before each acquisition. Continue
 official-page/signature/extraction work and padctl's native Steam experiment
 before selecting runtime architecture. Do not implement a guessed Bluetooth parser.
+
+## Phase 01 passive input checkpoint (after setup closeout)
+
+- Owner reconnected DInput and explicitly ran the suggested per-node temporary
+  ACL. Agent verified readable=true, writable=false; no agent/root-daemon or
+  persistent udev permission changes. The older mode0600 restriction above
+  describes the baseline, not current effective access.
+- Five-second untouched request yielded zero reports. First 30-second button
+  window yielded 14 axis-jitter packets, but owner confirmed missing that window;
+  those are not button evidence.
+- Coordinated capture stopped after owner's done reply: 14 reports, ID1,
+  **21 bytes each**, although the descriptor declares 15 bytes including ID.
+  Raw capture flushed incrementally and closed with requested-stop.
+- Owner-completed A/B/C/Z sequence gives A=byte9/10, B=byte9/20,
+  C=byte11/01, Z=byte11/02 (hex masks, ID included in offsets), each set/clear.
+  C/Z differ from A/B in this sample; combinations and M1–M4 remain untested.
+- External source `/tmp/opencode/flydigi/passive-dinput-coordinated-dqsg8uzu.jsonl`,
+  1802 bytes, SHA-256
+  `2ad2b739ef459c92117cc2ea3b50a6710cec5e3bd0b9bec6773761496f6e27fe`.
+  Public sanitized fixture and `docs/evidence/passive-dinput-abcz.md` saved.
+- No output commands or Steam tests. Phase 01 and all full product acceptance
+  criteria remain incomplete; gyro/rumble feasibility unresolved.
+- Capture increment checks: `python3 -m unittest discover -s tests -v`:
+  **19 passed**, Python 3.14.8. Scoped diagnostics authoritative for 4/4 Python
+  files, 0 errors/warnings; `git diff --check` exit 0. Independent verifier
+  **PASS**: source hash/size, all 14 packet bytes/times, privacy, descriptor
+  discrepancy, sequence and 19 tests confirmed. Checkpoint aggregate SHA-256
+  (sorted `path NUL contents NUL`, 11 files):
+  `9255a58a569514d89450d89a099d58dbc32bc58c626ff053a55461dd69e3b6ec`.
+  Only this factual result was added after verification; Phase 01 not closed.
+  Unrelated untracked
+  `.cortexkit/` belongs to the tooling/user environment and is left untouched.

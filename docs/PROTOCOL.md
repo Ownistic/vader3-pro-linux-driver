@@ -1,8 +1,9 @@
 # Protocol ledger
 
-Status: **two real Bluetooth descriptors obtained; no input/output reports
-captured**. This document distinguishes source-level observations and descriptor
-metadata from a verified wire specification.
+Status: **two Bluetooth descriptors and one owner-coordinated A/B/C/Z input
+capture obtained; no output commands tested**. Descriptor/source observations,
+sequence-associated button fields, and unknowns remain distinct from a complete
+verified wire specification.
 
 ## First physical observation
 
@@ -10,8 +11,9 @@ Before switching modes, the owner-confirmed Vader exposed Bluetooth
 `045e:02e0`, an Xbox-compatible descriptor. Its 306-byte descriptor has SHA-256
 `74a5dbcedf6d6a88f9eb6e66fbeb5a255ba800fd084390cbf325e0c4c74492d7`.
 It advertises standard controls and a rumble-style output report, but no explicit
-six-extra or IMU fields. Physical reports/feedback are untested; access to the
-hidraw node is currently denied. Mode switch setting is not independently known.
+six-extra or IMU fields. Xbox-mode physical reports/feedback are untested; the
+node was unreadable at descriptor acquisition. Mode switch setting was not
+independently known.
 See [Xbox-mode evidence](evidence/bluetooth-xbox-mode.md).
 
 After a normal mode switch/reconnection it exposes **`d7d7:0041`**, matching the
@@ -19,8 +21,22 @@ upstream DInput lead. Its 163-byte descriptor has SHA-256
 `227924e94560bea5149d6a75a8bb225143a1e4b0685075dea729a30649bc1f22`.
 BlueZ exposes HID-over-GATT and separate writable HID-report/vendor/UART
 characteristics. The HID report map itself advertises input only; this does not
-settle feedback availability. Physical input mapping/motion and all output
-commands remain unverified. See [DInput evidence](evidence/bluetooth-dinput-mode.md).
+settle feedback availability. Later owner-authorized read-only access yielded
+the partial A/B/C/Z observations below; motion and all output commands remain
+unverified. See [DInput evidence](evidence/bluetooth-dinput-mode.md) and
+[passive report evidence](evidence/passive-dinput-abcz.md).
+
+## Observed DInput input frames
+
+The coordinated capture contains 14 ID-1 reports, **21 bytes each**, versus
+15 bytes declared by the HID descriptor. Preserve the six additional bytes;
+all were zero in this small sample and their meaning is unknown.
+
+Offsets include report ID at byte 0. In the owner-completed A/B/C/Z sequence:
+A = byte 9 mask `0x10`; B = byte 9 mask `0x20`; C = byte 11 mask `0x01`;
+Z = byte 11 mask `0x02`. Each had a distinct set/clear pair. These are
+sequence-associated observations, not a general parser or simultaneous-input
+proof. M1–M4, remaining inputs, motion and Steam-editor exposure are unverified.
 
 ## Required transport inventory
 
@@ -33,9 +49,9 @@ Bluetooth HID bus `0005` alone does not distinguish Classic from BLE.
 
 | Fields | Bluetooth layout / units | State |
 | --- | --- | --- |
-| A/B/X/Y; D-pad; LB/RB; Start/Select; Home/system | Unknown | Untested |
+| A/B/X/Y; D-pad; LB/RB; Start/Select; Home/system | A/B fields above; remaining controls unknown | Partial raw observation; Steam untested |
 | LX/LY/RX/RY; L3/R3; LT/RT | Unknown | Untested |
-| M1/M2/M3/M4/C/Z | Unknown; independent bits must be proven | Untested |
+| M1/M2/M3/M4/C/Z | C/Z fields above; M1–M4 unknown; combinations need proof | Partial single-button raw observation; Steam untested |
 | Gyro XYZ and accelerometer XYZ | Unknown initialization, endian, scale, orientation, calibration/rate | Untested |
 | Rumble channels/strength/duration | Unknown Bluetooth output or feature command | Untested |
 

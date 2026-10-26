@@ -4,16 +4,18 @@
 
 | Check | Status | Evidence |
 | --- | --- | --- |
-| Diagnostic, descriptor fixture and documentation offline tests | Verified locally | `python3 -m unittest discover -s tests -v`: 17 tests passed on Python 3.14.8 |
+| Diagnostic, descriptor/input fixture and documentation offline tests | Verified locally | `python3 -m unittest discover -s tests -v`: 19 tests passed on Python 3.14.8 |
 | CLI help | Verified locally | `python3 tools/inventory.py --help`: exit 0 |
 | Initial local sysfs probe | Verified for tool execution only | `python3 tools/inventory.py --descriptor`: exit 0, `devices=[]`, `errors=[]` before connection; subsequent DInput discovery documented below; no hardware support claim |
-| Connected physical metadata | Partially verified | Owner-confirmed Vader as Xbox-compatible `045e:02e0` (306-byte descriptor), then DInput `d7d7:0041` (163-byte descriptor) with HID-over-GATT/vendor objects; no reports or Steam experiment; [DInput evidence](evidence/bluetooth-dinput-mode.md) |
+| Connected physical metadata | Partially verified | Owner-confirmed Vader as Xbox-compatible `045e:02e0` (306-byte descriptor), then DInput `d7d7:0041` (163-byte descriptor) with HID-over-GATT/vendor objects; [DInput evidence](evidence/bluetooth-dinput-mode.md) |
+| Passive DInput inputs | Partial raw observation | Owner-authorized read-only ACL; 14 coordinated 21-byte reports with A/B/C/Z press/release fields; no output writes or Steam experiment; [capture evidence](evidence/passive-dinput-abcz.md) |
 | Static diagnostics | Verified for inspected files | Scoped `aft_inspect`: 0 errors/warnings, authoritative reports for all 4 Python files after descriptor-fixture addition |
 | CI workflow | Untested remotely | `.github/workflows/check.yml` configured for Python 3.12; not run on GitHub here |
 | Bazzite runtime | Untested | No runtime translator/service/udev configuration exists yet |
 
 The diagnostic tests use temporary synthetic sysfs metadata. A separate fixture
-test checks both real descriptors' length/hash, not their functional behavior. Tests cover filtering,
+tests check both real descriptors' length/hash and the recorded A/B/C/Z sample's
+shape and press/release sequence, not a production decoder. Tests cover filtering,
 identity redaction, digest/descriptor opt-in, malformed/oversized/missing files,
 permission/disconnect races, symlinks, CLI validation/exit codes, and no false
 hardware-support success. They do **not** validate controller report decoding,
@@ -35,7 +37,9 @@ hardware. Repeat in each relevant mode without flashing/configuration writes.
 
 ### Optional private capture, when ready for protocol work
 
-These procedures have **not** been executed on the target. Keep raw output
+BlueZ device metadata inspection and an owner-authorized, read-only hidraw
+capture have now run; **btmon has not**. See the evidence records for exact
+boundaries. Keep raw output
 outside Git with private permissions; Bluetooth tools can reveal unrelated
 device identities. Do not upload their output without manual sanitization.
 
@@ -65,8 +69,8 @@ Do not send guessed rumble/feature reports or broadly chmod device nodes.
 
 ## Product acceptance matrix
 
-No target input/output or Steam experiments have been performed; physical
-metadata alone has been observed. These are separate
+Metadata and a small owner-coordinated raw A/B/C/Z input experiment have been
+observed. No output or Steam experiments have been performed. These are separate
 checks for each mode; evtest or UHID enumeration alone cannot mark them passed.
 
 | PRD requirement | Gaming Mode | Desktop Mode | Evidence needed |
@@ -82,8 +86,9 @@ checks for each mode; evtest or UHID enumeration alone cannot mark them passed.
 | A10: built-in/unrelated controllers unaffected | Untested | Untested | Before/after independent controller test |
 | A11: Bazzite permissions/startup/reboot/update/uninstall | Untested | Untested | Actual immutable-host deployment logs and recovery |
 
-Hardware-dependent implementation is blocked pending live captures, scoped node
-access, and real Steam experiments; the criteria themselves remain untested, not
+Hardware-dependent implementation needs more live inputs/combined presses and
+real Steam experiments; temporary read-only node access enabled this first
+capture but is not a deployment permission policy. Product criteria remain untested, not
 failed. Bluetooth rumble is unresolved, not declared impossible.
 
 ## Later automated test ladder

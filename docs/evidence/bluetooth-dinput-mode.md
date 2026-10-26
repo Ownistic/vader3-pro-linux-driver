@@ -1,5 +1,9 @@
 # Connected Bluetooth DInput: first descriptor and GATT inventory
 
+This record describes the initial metadata-only acquisition. Later
+[read-only input capture](passive-dinput-abcz.md) supersedes its access blocker,
+but does not establish output commands or Steam support.
+
 The owner switched modes normally and reconnected the Vader 3 Pro. No firmware
 or persistent profile writes were performed by the project.
 
