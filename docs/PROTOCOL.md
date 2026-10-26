@@ -176,6 +176,30 @@ that change the ledger:
   positive readings. The earlier note that copied the XInput formula was
   wrong for Bluetooth DInput; the corrected formula is in the disassembly doc.
 
+## Motor / rumble path
+
+See [firmware rumble analysis](evidence/vader3pro-firmware-rumble.md). The
+firmware **does** implement rumble, via PWM — not via a HID output report.
+
+- `0x0F` is **not** handled by the main dispatcher `FUN_00018138`. It is parsed
+  in `FUN_0001a0cc`, reached from the frame-arrival handler, and requires
+  `frame[0] == 0x05` and a received length **> 11** bytes.
+- Bytes 2/3 drive motor pair A; bytes **4/5** drive a second pair B that the
+  Windows builder never fills (it allocates 15+2 bytes and writes only 0–3, so
+  B arrives as zero). The wire command is really `05 0F A1 A2 B1 B2 …`.
+- The duration is a hard **500 ms timeout** carried in the command, not an
+  intensity. Stopping is `05 0F 00 00` or simply waiting.
+- Levels are clamped to **250**, not 255, in the PWM stage.
+- Duty goes to the TC32 PWM compare registers `0x8007a8` / `0x8007a4` /
+  `0x80079c` / `0x800798`, selected by channel codes `0x280`/`0x240`/`0x10`/`0x8`.
+  All four are driven inverted (`0xFA - duty`).
+- No additive-checksum verification was found on this path.
+
+Practical consequence: rumble needs only the same `05`-framed **output write**
+as the vendor-mode switch. No FF descriptor or HID output report is involved.
+Whether the Bluetooth transport delivers such writes to the firmware remains
+**untested**.
+
 ## Required transport inventory
 
 For each controller mode, record firmware, Bluetooth Classic HID versus BLE/HOGP,
