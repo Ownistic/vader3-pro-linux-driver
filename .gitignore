@@ -16,3 +16,6 @@ __pycache__/
 .venv/
 /target/
 .DS_Store
+
+# Local tool state (Magic Context / AFT)
+.cortexkit/

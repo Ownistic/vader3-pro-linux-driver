@@ -196,9 +196,25 @@ firmware **does** implement rumble, via PWM — not via a HID output report.
 - No additive-checksum verification was found on this path.
 
 Practical consequence: rumble needs only the same `05`-framed **output write**
-as the vendor-mode switch. No FF descriptor or HID output report is involved.
-Whether the Bluetooth transport delivers such writes to the firmware remains
-**untested**.
+as the vendor-mode switch, and it **has now been confirmed on hardware over USB
+DInput** — see [USB DInput vendor rumble](evidence/usb-dinput-vendor-rumble.md).
+The channel is the `mi_02` interface (vendor usage page `0xFFA0`, output report
+ID 5, 31 bytes). Sustained rumble means re-sending the command more often than
+every 500 ms.
+
+Two corrections to earlier notes in this ledger:
+
+1. The leading `5` is the **HID report ID**, not a command byte. Both vendor
+   descriptors declare `REPORT_ID 5`. That distinction is why bare frames were
+   rejected at the USB vendor endpoints.
+2. "Rumble is blocked in DInput" is true only for the **Bluetooth** DInput
+   personality, whose descriptor declares no output report at all. USB DInput
+   (`04b4:2412`) does expose a writable vendor output report and does rumble.
+   The hardware was never the limitation.
+
+Whether the **Bluetooth** transport delivers such writes to the firmware remains
+**untested**, and the BT DInput descriptor's lack of any output report makes it
+doubtful without a descriptor or firmware change.
 
 ## Trigger haptics
 
@@ -249,7 +265,7 @@ Bluetooth HID bus `0005` alone does not distinguish Classic from BLE.
 | M1–M4 | byte 11 `0x04`/`0x08`/`0x10`/`0x20` | Session-5 isolation; distinct from D-pad |
 | LX/LY/RX/RY | byte 1/2/3/4; extremes `0x80` and `0x7f`, idle ≈ `0xfd` | Session-6 click-shake isolation + held plateaus |
 | Gyro XYZ and accelerometer XYZ | Not present in passive ID-1 stream (shake test) | Untested; likely vendor command required |
-| Rumble channels/strength/duration | Unknown Bluetooth output or feature command | Untested |
+| Rumble channels/strength/duration | **USB DInput solved**: `05 0F <L> <R>` to `mi_02`, re-send <500 ms | USB verified on hardware; Bluetooth untested (no BT output report exists) |
 | Simultaneous inputs | Not yet exercised | Untested |
 
 Observed DInput descriptor field order (not yet mapped against physical reports):
