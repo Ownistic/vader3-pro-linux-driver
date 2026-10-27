@@ -13,6 +13,7 @@
 *.har
 *.pyc
 __pycache__/
+.pytest_cache/
 .venv/
 /target/
 /driver/target/

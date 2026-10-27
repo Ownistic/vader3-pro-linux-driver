@@ -177,7 +177,10 @@ def main(argv=None):
             saved = args.out
             output = open(saved, "w", encoding="utf-8")
         else:
-            directory = Path("/tmp/opencode")
+            # Captures are raw device traffic, so they default to a private
+            # directory rather than the system temp root. `TMPDIR` is honoured
+            # when set; the 0600 mode below is the actual protection.
+            directory = Path(os.environ.get("TMPDIR") or tempfile.gettempdir())
             directory.mkdir(parents=True, exist_ok=True)
             descriptor, saved = tempfile.mkstemp(prefix="hidraw-capture-", suffix=".jsonl", dir=directory)
             output = os.fdopen(descriptor, "w", encoding="utf-8")

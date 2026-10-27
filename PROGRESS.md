@@ -31,7 +31,7 @@ was "unresolved" is obsolete.
 
 ## Baseline
 
-- Repository: local checkout; branch `main`, no commits.
+- Repository: local checkout; branch `main`, no commits at baseline.
 - Initially empty working tree except `.git/`; no repository AGENTS/override file.
 - Python 3.14.8 available. No baseline tests existed.
 - At baseline no physical controller or Steam test had been performed. A later
