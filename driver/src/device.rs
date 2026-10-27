@@ -142,19 +142,26 @@ impl PhysicalDevice {
         }
     }
 
-    /// Read and parse one report, ignoring unrecognised frames.
+    /// Read every queued report and return the **newest** valid state.
+    ///
+    /// Draining matters for latency. Returning after the first parsed report
+    /// leaves the rest in the kernel buffer, so with the loop's sleep between
+    /// iterations a burst of reports is consumed one per iteration and the
+    /// device's position falls steadily further behind — the pad shows where the
+    /// stick *was*, not where it is. For an input translator the newest state is
+    /// the only one worth showing, so older queued states are discarded.
     ///
     /// A malformed frame is dropped rather than ending the session: the device
     /// occasionally emits short or unexpected reports around mode changes, and
     /// terminating on those would make the daemon fragile.
     pub fn read_state(&mut self) -> Result<Option<State>> {
+        let mut newest = None;
         while let Some(raw) = self.try_read()? {
-            match input::parse(&raw) {
-                Ok(state) => return Ok(Some(state)),
-                Err(_) => continue,
+            if let Ok(state) = input::parse(&raw) {
+                newest = Some(state);
             }
         }
-        Ok(None)
+        Ok(newest)
     }
 }
 
@@ -498,9 +505,56 @@ pub fn discover(vendor: u16, product: u16) -> Vec<PathBuf> {
     found
 }
 
+/// Reduce a batch of raw reports to the newest parseable state.
+///
+/// Extracted from [`PhysicalDevice::read_state`] so the drain semantics can be
+/// tested without a device. Returning the *first* state instead of the last is a
+/// latency bug that is invisible on a lightly loaded system: the pad then shows
+/// an older position than the controller is actually at.
+#[must_use]
+pub fn newest_state(reports: &[Vec<u8>]) -> Option<crate::input::State> {
+    reports
+        .iter()
+        .filter_map(|raw| crate::input::parse(raw).ok())
+        .next_back()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn report_with_left_x(value: u8) -> Vec<u8> {
+        let mut r = vec![0u8; crate::input::REPORT_LEN];
+        r[0] = crate::input::REPORT_ID;
+        r[1] = value;
+        r[2] = 0xfd;
+        r[3] = 0xfd;
+        r[4] = 0xfd;
+        r
+    }
+
+    #[test]
+    fn newest_state_returns_the_last_report_not_the_first() {
+        // Three queued reports; the pad must show the third, which is the most
+        // recent physical position.
+        let reports = vec![report_with_left_x(0x10), report_with_left_x(0x20), report_with_left_x(0x30)];
+        let state = newest_state(&reports).expect("a parseable state");
+        assert_eq!(state.left_x, 0x30, "must take the newest, not the oldest");
+    }
+
+    #[test]
+    fn newest_state_skips_unparseable_frames() {
+        let mut bad = vec![0u8; 4];
+        bad[0] = crate::input::REPORT_ID;
+        let reports = vec![bad, report_with_left_x(0x40)];
+        let state = newest_state(&reports).expect("the good frame survives");
+        assert_eq!(state.left_x, 0x40);
+    }
+
+    #[test]
+    fn newest_state_of_nothing_is_none() {
+        assert!(newest_state(&[]).is_none());
+    }
 
     #[test]
     fn identity_constants_are_the_documented_pair() {
