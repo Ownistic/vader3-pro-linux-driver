@@ -33,6 +33,7 @@ buttons are independent, and delivers rumble over the Nordic UART characteristic
 | Physical rumble over USB | Verified on hardware | sustained vibration on `mi_02` `0xFFA0` |
 | Virtual pad exposes 21 buttons | Verified | kernel `capabilities/key` = 21 bits |
 | Virtual pad declares `FF_RUMBLE` | Verified | kernel `capabilities/ff` = bit 80 |
+| Physical node suppressed | Verified | a second reader received 0 events while grabbed |
 | Host effect upload handshake | Verified | `EVIOCSFF` completes, magnitudes arrive scaled |
 | Steam recognises the pad and the six extras | **Untested** | runs on the Legion Go |
 | Native gyro | **Not implemented** | absent from the Bluetooth DInput stream |
@@ -61,6 +62,11 @@ bluetooth_address = "AA:BB:CC:DD:EE:FF"
 
 virtual_name = "Flydigi Vader 3 Pro (translated)"
 rumble = true
+
+# Hide the physical controller's input events so it does not register twice.
+# Reversible: the kernel drops the grab when the process exits.
+suppress_physical = true
+
 log_level = "info"
 ```
 
@@ -108,8 +114,10 @@ Levels clamp at **250**, not 255.
 - **No native gyro.** The Bluetooth DInput stream carries no motion data;
   gyro lives only in vendor mode (`05 EE 01`), which was never verified over
   Bluetooth and whose exploration reset the controller's Bluetooth bond once.
-- **The physical controller still appears** alongside the virtual one. Duplicate
-  suppression is not implemented.
+- **Suppression hides events, not the device entry.** `suppress_physical` grabs
+  the physical evdev node exclusively, so nothing else receives its input. The
+  node still exists, so a device list can show both — but only one produces
+  input.
 - **Steam recognition of the six extras is unverified.** If Steam collapses them,
   the fallback is a DualSense-style identity with a translated report format.
 - **LED control is not exposed.** The `0x33` LED path ends in a flash

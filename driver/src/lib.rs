@@ -26,6 +26,7 @@ pub mod ff;
 pub mod input;
 pub mod pad;
 pub mod rumble;
+pub mod suppress;
 pub mod uhid;
 
 use std::path::Path;
@@ -152,6 +153,9 @@ pub struct Translator {
     log: Logger,
     physical: device::PhysicalDevice,
     virtual_pad: pad::VirtualPad,
+    /// Exclusive grabs on the physical controller's evdev nodes, held for the
+    /// process lifetime so the controller does not appear twice.
+    _grabs: Vec<suppress::ExclusiveGrab>,
     rumble: RumbleSink,
     last_state: State,
     /// True while host feedback is active, so frames are re-sent before the
@@ -190,9 +194,32 @@ impl Translator {
                 "matched by id"
             }
         );
+        let sysfs = path.sysfs.clone();
         let path = path.path;
         let physical = device::PhysicalDevice::open(&path)?;
         log_info!(log, "transport: {}", physical.bus_label());
+
+        // Suppress the physical node *before* the virtual pad exists, so there
+        // is no window in which both appear. The grab is reversible on process
+        // exit by design; see `suppress` for why this is not a driver unbind.
+        let mut grabs = Vec::new();
+        if cfg.suppress_physical {
+            let nodes = suppress::evdev_nodes_for(&sysfs);
+            if nodes.is_empty() {
+                log_warn!(log, "no evdev nodes found for the controller; not suppressing");
+            }
+            for node in nodes {
+                match suppress::ExclusiveGrab::acquire(&node) {
+                    Ok(grab) => {
+                        log_info!(log, "suppressed physical node {}", grab.path().display());
+                        grabs.push(grab);
+                    }
+                    Err(e) => {
+                        log_warn!(log, "could not suppress {}: {e:#}", node.display());
+                    }
+                }
+            }
+        }
 
         // Rumble delivery is chosen by *attempting* the GATT path when an
         // address is configured, because the bus field is not trustworthy: a
@@ -229,6 +256,7 @@ impl Translator {
             log,
             physical,
             virtual_pad,
+            _grabs: grabs,
             rumble,
             last_state: State::default(),
             rumble_levels: None,

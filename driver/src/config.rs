@@ -29,6 +29,13 @@ pub struct Config {
     /// The controller is edge-triggered, so an idle poll costs one non-blocking
     /// read. 4 ms keeps latency low without busy-waiting.
     pub poll_ms: u64,
+    /// Hide the physical controller's evdev nodes so it does not appear as a
+    /// duplicate gamepad alongside the virtual one.
+    ///
+    /// Uses `EVIOCGRAB`, which the kernel releases automatically when this
+    /// process exits, so a crash cannot leave the controller unavailable. It
+    /// still reads the controller through hidraw, which is a separate interface.
+    pub suppress_physical: bool,
     /// Log level: `error`, `warn`, `info`, `debug` or `trace`.
     pub log_level: String,
 }
@@ -41,6 +48,7 @@ impl Default for Config {
             virtual_name: "Flydigi Vader 3 Pro (translated)".to_string(),
             rumble: true,
             bluetooth_address: None,
+            suppress_physical: true,
             poll_ms: 4,
             log_level: "info".to_string(),
         }

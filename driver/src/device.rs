@@ -208,6 +208,7 @@ pub fn discover_detailed(vendor: u16, product: u16) -> Vec<HidrawNode> {
 
         found.push(HidrawNode {
             path,
+            sysfs: entry.path(),
             bus: bus.unwrap_or(0),
             vendor,
             product,
@@ -286,6 +287,7 @@ pub fn discover_candidates() -> Vec<HidrawNode> {
 
         found.push(HidrawNode {
             path,
+            sysfs: entry.path(),
             bus,
             vendor: vid,
             product: pid,
@@ -416,6 +418,12 @@ pub fn sha256_hex(data: &[u8]) -> String {
 #[derive(Debug, Clone)]
 pub struct HidrawNode {
     pub path: PathBuf,
+    /// Sysfs directory for this node, e.g. `/sys/class/hidraw/hidraw9`.
+    ///
+    /// Kept because related nodes (its evdev siblings, its descriptor) must be
+    /// found through sysfs, and rebuilding that path from `/dev/hidraw9` is not
+    /// possible — a mistake that silently disabled physical-node suppression.
+    pub sysfs: PathBuf,
     pub bus: u32,
     pub vendor: u16,
     pub product: u16,

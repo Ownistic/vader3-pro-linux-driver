@@ -79,9 +79,13 @@ output reports, so a hidraw write succeeds and does nothing.
 - **Bounded FF handshake.** The `UI_BEGIN_FF_*`/`UI_END_FF_*` round trip is
   answered promptly; a missed answer blocks the host's `upload_effect()` call
   until it times out.
-- **No duplicate suppression of the physical node** yet. The physical controller
-  still appears to the system, so PRD A2 is unmet and suppression is
-  deliberately deferred until safe cleanup is proven.
+- **Duplicate suppression uses `EVIOCGRAB`, not a driver unbind.** The grab is
+  released by the kernel when the process exits, including on a crash, so a
+  failed run cannot leave the controller unusable. A driver unbind would need
+  manual repair and is rejected for that reason. Suppression hides the physical
+  node's *events*; the node still appears in `/dev/input` and may still be
+  enumerated as a connected device, so A2 is met for input purposes but a device
+  list can still show both entries.
 
 ## Deviations from the PRD's preferred path
 
