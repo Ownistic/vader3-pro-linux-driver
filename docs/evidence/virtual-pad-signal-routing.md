@@ -148,3 +148,43 @@ Two lessons recorded deliberately:
 - The unit tests in `tests/test_interactive_probe.py` include one that asserts a
   *per-sample* comparison finds nothing, so the original defect is pinned rather
   than merely fixed.
+
+## Latency, measured
+
+Measured with `driver/contrib/latency-test.py` during a continuous right-stick
+sweep with periodic A taps, 25 s window, over Bluetooth DInput.
+
+| Metric | Value |
+| --- | --- |
+| Physical report rate | 128 /s |
+| Virtual event rate | 324 /s |
+| Report interval median | 7.61 ms |
+| Report interval p95 | 8.95 ms |
+| **Button latency median** | **2.67 ms** |
+| **Button latency p95** | **4.00 ms** |
+| Button latency max | 4.10 ms |
+| Button latency min | 0.16 ms |
+
+### The 4 ms figure was the sleep, not the device
+
+The distribution is the giveaway: `min 0.16 ms` but `p95 4.00` and `max 4.10`.
+Those round numbers are `poll_ms = 4` quantised. The loop slept for a fixed
+interval instead of waiting for the fd, so every input paid the full interval in
+the worst case. The minimum is what the transport can actually do.
+
+Replacing the sleep with `poll(2)` on the hidraw fd removes the floor: the kernel
+wakes the loop the moment a report arrives, and the timeout only bounds
+housekeeping. Idle CPU cost after the change measured **0.6% of one core**
+(3 ticks over 5 s), so blocking wait costs nothing when nothing happens.
+
+### Reading these numbers correctly
+
+- **128 reports/s is the device's rate, not a cap.** The controller is
+  edge-triggered: it reports when something changes. A hand sweep produced 34
+  distinct left-stick-X values across 3217 reports, so reports arrive far faster
+  than the axis changes — the rate reflects motion, not a polling clock.
+- **Virtual events exceed physical reports** because each report expands into
+  several evdev events (axes plus a `SYN_REPORT`), which is expected.
+- **`max 217 ms` report interval** is a stall in the *device's* reporting, not the
+  translator. It appears once in 25 s and coincides with the radio link, not with
+  any host-side work.

@@ -272,6 +272,14 @@ impl Translator {
         while !should_stop() {
             self.service_virtual_pad()?;
 
+            // Block in the kernel until a report arrives, instead of sleeping for
+            // a fixed interval. A fixed sleep adds its full duration to every
+            // input: measured p95 and max latency were both 4.0 ms against a
+            // 0.16 ms minimum, which is the sleep quantised and nothing else.
+            // The timeout keeps the rumble service tick and the stop check
+            // responsive when the controller is idle.
+            self.physical.wait_readable(poll)?;
+
             match self.physical.read_state() {
                 Ok(Some(state)) => {
                     if state != self.last_state {
@@ -291,7 +299,6 @@ impl Translator {
             }
 
             self.service_rumble();
-            std::thread::sleep(poll);
         }
 
         self.neutralise()?;
