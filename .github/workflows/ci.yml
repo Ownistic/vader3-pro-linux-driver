@@ -18,6 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # libdbus-sys links against the system libdbus, and its build script panics
+      # with a bare pkg_config error if the headers are missing. Installing them
+      # explicitly both fixes the build and documents the real dependency.
+      - name: Install libdbus headers
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt

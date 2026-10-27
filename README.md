@@ -105,6 +105,9 @@ it work. Please treat this as beta software.
 
 - **Linux** with BlueZ and `/dev/uinput` (tested on Bazzite/Fedora-based systems)
 - **Rust 1.75+** to build from source
+- **`libdbus` development headers** to build — `libdbus-1-dev` (Debian/Ubuntu),
+  `dbus-devel` (Fedora/Bazzite), or `dbus` (Arch). Without them the build stops
+  with `Package dbus-1 was not found`.
 - A **Flydigi Vader 3 Pro** connected over **Bluetooth in DInput mode**
 - Read access to the controller's hidraw node, write access to `/dev/uinput`
 
@@ -122,6 +125,14 @@ it work. Please treat this as beta software.
 git clone https://github.com/Ownistic/vader3-pro-linux-driver.git
 cd vader3-pro-linux-driver/driver
 cargo build --release
+```
+
+If the build stops on `Package dbus-1 was not found`, install the headers:
+
+```sh
+sudo dnf install dbus-devel        # Bazzite / Fedora
+sudo apt install libdbus-1-dev    # Debian / Ubuntu
+sudo pacman -S dbus               # Arch
 ```
 
 The binary lands at `driver/target/release/vader3p-steam`. Copy it anywhere on
