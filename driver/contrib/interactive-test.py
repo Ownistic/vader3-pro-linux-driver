@@ -200,16 +200,30 @@ def main():
                                 virt_held.discard(name)
                         elif kind == 3:  # EV_ABS
                             name = ABS_NAMES.get(code, f'abs {code:#x}')
-                            previous = axis_last.get(code)
+                            # Compare against the last *reported* value, not the
+                            # previous sample. A stick moved by hand changes a
+                            # few counts per report, so a per-sample threshold
+                            # never fires and stick motion goes unreported.
+                            # Accumulating deviation is what makes it visible.
+                            last_reported = axis_last.get(code)
+                            if last_reported is None:
+                                # First sample establishes the baseline silently;
+                                # it is usually the resting centre.
+                                axis_last[code] = value
+                                continue
+                            delta = value - last_reported
+                            # Thresholds are a fraction of the 0..255 range so
+                            # the output stays readable during a fast sweep
+                            # without hiding a deliberate move. A stick moved
+                            # slowly changes only a few counts per report, so
+                            # the comparison must be cumulative — see
+                            # tests/test_interactive_probe.py.
+                            threshold = 32 if name.endswith('TRIGGER') else 24
+                            if abs(delta) <= threshold:
+                                continue
                             axis_last[code] = value
-                            # Only report meaningful movement, and only on
-                            # direction change, so a held stick does not flood.
-                            if name.endswith('TRIGGER'):
-                                if previous is not None and abs(value - previous) > 40:
-                                    print(f'{elapsed:5.1f}s  VIRTUAL   {name} = {value}')
-                            elif previous is not None and abs(value - previous) > 60:
-                                direction = '+' if value > previous else '-'
-                                print(f'{elapsed:5.1f}s  VIRTUAL   {name} moving {direction}')
+                            direction = '+' if delta > 0 else '-'
+                            print(f'{elapsed:5.1f}s  VIRTUAL   {name} {direction} (now {value})')
     finally:
         try:
             os.close(phys_fd)

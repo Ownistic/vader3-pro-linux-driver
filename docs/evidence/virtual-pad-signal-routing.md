@@ -110,3 +110,41 @@ Requires no controller and no root: it creates its own pad and tears it down.
   It does not prove the whole daemon path under Steam.
 - Per-button count queries (`SDL_GameControllerNumButtons`) are unavailable in
   this SDL build, so counts come from the joystick layer.
+
+## Stick axes under the daemon (measured)
+
+The signal probe covers the pad in isolation. A separate interactive run through
+the full daemon confirmed the sticks end-to-end: moving both sticks for 25 s
+produced these raw `EV_ABS` samples on the virtual pad's event node.
+
+| Axis | Samples | Range observed |
+| --- | --- | --- |
+| `LEFT STICK X` | 766 | 0..255 |
+| `LEFT STICK Y` | 818 | 0..255 |
+| `RIGHT STICK X` | 734 | 0..255 |
+| `RIGHT STICK Y` | 766 | 0..255 |
+
+Full travel in both directions, so no scaling or clamping problem exists in the
+daemon path either.
+
+### The reporting bug this exposed
+
+The interactive probe initially reported no stick movement at all, and the
+obvious reading — "sticks are broken" — was wrong. Its filter compared each
+sample to the *immediately previous* one with a 90-count threshold. A hand-moved
+stick changes only a few counts between reports, so no single step ever cleared
+the threshold and nothing was printed. Triggers appeared to work only because
+they jump `0 -> 117 -> 207` in a single report.
+
+The fix compares against the last **reported** value, so gradual movement
+accumulates. Thresholds are now 24 counts for sticks and 32 for triggers, which
+produces several reports for a full sweep without one line per sample.
+
+Two lessons recorded deliberately:
+
+- **Absence of output is not evidence of absence of signal.** A reader with no
+  activity is indistinguishable from a filter that rejects everything, so a probe
+  must report its own sample counts — which is what made the difference here.
+- The unit tests in `tests/test_interactive_probe.py` include one that asserts a
+  *per-sample* comparison finds nothing, so the original defect is pinned rather
+  than merely fixed.
