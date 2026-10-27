@@ -15,6 +15,7 @@
 __pycache__/
 .venv/
 /target/
+/driver/target/
 .DS_Store
 
 # Local tool state (Magic Context / AFT)
