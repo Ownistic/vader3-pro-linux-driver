@@ -17,14 +17,14 @@ after a kernel update. It runs as a normal user process.
 
 ```
 ┌──────────────────┐   hidraw    ┌─────────────────┐   uinput   ┌──────────────┐
-│ Vader 3 Pro      │────────────▶│ vader3p-steam   │───────────▶│ virtual pad  │──▶ Steam
-│ (Bluetooth      │   21-byte    │                 │  EV_KEY    │ 21 buttons   │
-│  DInput mode)    │   reports    │                 │  EV_ABS    │ 6 axes       │
-└──────────────────┘              │                 │  EV_FF ◀───│ FF_RUMBLE    │
-                                  └────────┬────────┘            └──────────────┘
-                                           │ 4-byte frame, Nordic UART
-                                           ▼
-                                    rumble on the real controller
+│ Vader 3 Pro      │───────────▶│ vader3p-steam   │──────────▶│ virtual pad  │──▶ Steam
+│ (Bluetooth       │  21-byte    │                 │  EV_KEY    │ 21 buttons   │
+│  DInput mode)    │  reports    │                 │  EV_ABS    │ 6 axes       │
+└──────────────────┘             │                 │  EV_FF ◀──│ FF_RUMBLE    │
+                                 └────────┬────────┘            └──────────────┘
+                                          │ 4-byte frame, Nordic UART
+                                          ▼
+                               rumble on the real controller
 ```
 
 ---
