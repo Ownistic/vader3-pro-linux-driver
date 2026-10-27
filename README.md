@@ -1,11 +1,11 @@
-# vader3p-steam
+# Vader 3 Pro Linux Driver
 
 Makes a **Flydigi Vader 3 Pro connected over Bluetooth** work as a complete
-controller in Steam Input on Linux — including the six extra buttons (M1, M2, M3,
-M4, C, Z) and real rumble.
+controller in **Steam Input** on Linux — including the six extra buttons (M1, M2,
+M3, M4, C, Z) and real rumble.
 
-No kernel modules. No patched firmware. No changes to an immutable OS. It runs as
-a normal user process.
+**Userspace, not a kernel module.** No DKMS, no `modprobe`, nothing to rebuild
+after a kernel update. It runs as a normal user process.
 
 ```
 ┌──────────────────┐   hidraw    ┌─────────────────┐   uinput   ┌──────────────┐
@@ -41,6 +41,34 @@ invisible as *gamepad* controls, so they cannot be assigned. A mapping file is
 included that binds them.
 
 This daemon solves the first problem and ships the mapping file for the second.
+
+---
+
+## Steam Input is the point
+
+This project does **not** remap buttons. It has no macro system, no profiles, no
+per-game configuration, and deliberately no opinions about what M1 should do.
+
+That is a design decision, and it follows from where the work already exists.
+Steam Input is a full remapping engine: per-game layouts, chords, mode shifts,
+radial menus, action sets, haptics, and a shareable community of layouts. Building
+a second, smaller one inside this daemon would be strictly worse and would fight
+Steam for the same job.
+
+So the contract is narrow by intent: **every physical input must arrive in Steam as
+its own distinct control.** That is all. Once M1 is a real button rather than a
+bit nobody can see, every use for it — a keyboard key, a mode shift, a radial
+menu, another controller's button — is Steam's job and already solved.
+
+Two consequences worth knowing, because both look like missing features:
+
+- **The six extras are exposed as paddles and misc buttons, not keyboard keys.**
+  `misc1`, `touchpad`, `paddle1`–`paddle4` are the slots SDL has for exactly this
+  (a controller that reports more buttons than a standard pad). They arrive as
+  ordinary gamepad controls, so Steam Input can bind them like any other button.
+- **Rumble is forwarded, not synthesised.** Steam's own haptic settings drive it
+  through `FF_RUMBLE` on the virtual pad; the daemon translates those effects to
+  the controller's Nordic UART frame. No game needs to know the difference.
 
 ---
 
@@ -83,8 +111,8 @@ it work. Please treat this as beta software.
 ### 1. Build
 
 ```sh
-git clone <REPOSITORY-URL> vader3p-steam
-cd vader3p-steam/driver
+git clone https://github.com/Ownistic/vader3-pro-linux-driver.git
+cd vader3-pro-linux-driver/driver
 cargo build --release
 ```
 
@@ -415,11 +443,11 @@ Idle CPU cost is 0.6% of one core.
 
 ```sh
 cd driver
-cargo test                                        # 97 Rust tests
+cargo test                                        # Rust suite
 cargo clippy --lib --bins --tests                 # lint the shipped code
 cargo run --release --example signal_probe        # verify pad routing
 
-cd .. && python -m pytest tests/ -q               # 37 Python tests
+cd .. && python -m pytest tests/ -q               # offline Python suite
 ```
 
 The Python tests run offline against recorded fixtures and need no hardware:

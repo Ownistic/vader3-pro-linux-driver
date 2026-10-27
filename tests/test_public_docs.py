@@ -123,6 +123,21 @@ def test_readme_does_not_claim_steam_is_verified():
     )
 
 
+def test_readme_does_not_hardcode_test_counts():
+    """Test counts rot; the README said 37 Python tests when there were 48.
+
+    The count itself is not useful to a reader -- the runner prints it. Stating it
+    only creates a number that nobody remembers to update, so the fix is to not
+    state it rather than to keep two copies in sync.
+    """
+    text = _readme()
+    stale = re.search(r"#\s*\d+\s+(Rust|Python)\s+tests", text)
+    assert not stale, (
+        f"the README states a hardcoded test count ({stale.group(0)!r}); "
+        "the runner reports it, so the doc should not duplicate it"
+    )
+
+
 def test_progress_documents_the_working_driver_not_only_research():
     """PROGRESS.md once still said rumble was unresolved after it was solved.
 
