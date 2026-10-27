@@ -1,4 +1,11 @@
-# Bluetooth DInput write paths: what is reachable and what is not
+# Bluetooth write paths: what is reachable and what is not
+
+> **SUPERSEDED IN PART.** Bluetooth rumble was subsequently shown to work with a
+> 4-byte frame on the Nordic UART service. See
+> [bluetooth-rumble-solved.md](bluetooth-rumble-solved.md). The observations
+> below remain accurate as measurements; the conclusions that Bluetooth rumble
+> was impossible, and that the vendor characteristic was the OTA channel, are
+> withdrawn.
 
 This record covers active Bluetooth experiments on the Vader 3 Pro
 (`d7d7:0041`, HID-over-GATT) on 2026-10-26, plus the firmware analysis used to
@@ -222,7 +229,18 @@ Two statements made earlier in this project are withdrawn:
 - Does the Bluetooth **XInput** personality (six declared output reports) expose a
   command channel that DInput does not?
 
-## Reproduction
+## Corrections applied after the fix was found
+
+This document originally concluded that the vendor `1A12` characteristic was the
+OTA endpoint and that the `OTA` label referred to it. Both were wrong: the `OTA`
+string at `0x239c4` names the **Nordic UART service**, and NUS is the correct
+command channel. The vendor characteristic disconnects the controller precisely
+because it is the wrong one.
+
+It also treated the absence of a HID output report as evidence that no write
+path existed. The device exposes a second, independent GATT command service, so
+that inference was unsound. See
+[bluetooth-rumble-solved.md](bluetooth-rumble-solved.md).
 
 Scripts used, all outside the repository:
 
@@ -235,3 +253,5 @@ Scripts used, all outside the repository:
 | `ba_rumble_probe.py`, `nus_ba.py` | `0xBA` short-frame bursts |
 | `ota_handshake_probe.py` | `AA BB` / `BB AA` handshake with notify |
 | `wrapped_rumble_probe.py`, `nus_probe.py` | `5A A5` wrapped frames |
+| `four_byte_rumble.py` | **the working 4-byte rumble frame** |
+| `rumble_ab_test.py`, `rumble_levels.py` | control and intensity-stepped verification |

@@ -212,18 +212,26 @@ Two corrections to earlier notes in this ledger:
    (`04b4:2412`) does expose a writable vendor output report and does rumble.
    The hardware was never the limitation.
 
-Whether the **Bluetooth** transport delivers such writes to the firmware is
-covered separately in
-[Bluetooth write paths](evidence/bluetooth-write-paths.md) and
-[queue topology](evidence/bluetooth-queue-topology.md). Summary: the BT DInput
-descriptor declares no output report, so a `05`-framed hidraw write is
-unconditionally "accepted" and proves nothing; BlueZ refuses HID-service GATT
-writes locally (verified with `btmon`: no ATT write reaches the air); the vendor
-`1A12` characteristic disconnects the controller on every frame tried; the
-Nordic UART (`OTA`) service accepts writes without effect; and on firmware
-6.7.5.1 the inbound command queue is fed **only** by the wired USB frame
-validator, so Bluetooth has no path to the command dispatcher. Bluetooth rumble
-is **not possible without a device-side change** on this build.
+Whether the **Bluetooth** transport delivers such writes is **solved**: see
+[Bluetooth rumble](evidence/bluetooth-rumble-solved.md). Rumble over Bluetooth
+DInput does **not** use a HID output report at all. It uses the Nordic UART
+service (the service the firmware labels `OTA`), with a 4-byte frame:
+
+```
+11 <left> <right> <duration_ms>      -> 6e400002 (NUS RX)
+11 00 00 00                          -> stop
+```
+
+Verified on hardware: sustained vibration, and an intensity-stepped test
+(low `0x30` → high `0xFA` → medium `0x80`) was felt in exactly that order. No
+firmware modification is required.
+
+The 20-byte queue analysis in
+[queue topology](evidence/bluetooth-queue-topology.md) is still accurate for
+`FUN_00018138` / `FUN_000183c8`, but those are not the only dispatchers —
+`FUN_0000b830` is a separate GATT-reachable path that the queue analysis did not
+cover. Earlier claims that Bluetooth rumble was impossible without a
+device-side change are **superseded**.
 
 ## Trigger haptics
 
@@ -274,7 +282,7 @@ Bluetooth HID bus `0005` alone does not distinguish Classic from BLE.
 | M1–M4 | byte 11 `0x04`/`0x08`/`0x10`/`0x20` | Session-5 isolation; distinct from D-pad |
 | LX/LY/RX/RY | byte 1/2/3/4; extremes `0x80` and `0x7f`, idle ≈ `0xfd` | Session-6 click-shake isolation + held plateaus |
 | Gyro XYZ and accelerometer XYZ | Not present in passive ID-1 stream (shake test) | Untested; likely vendor command required |
-| Rumble channels/strength/duration | **USB DInput solved**: `05 0F <L> <R>` to `mi_02`, re-send <500 ms. Bluetooth: no output report declared; hidraw writes succeed unconditionally; BlueZ blocks HID-service writes; NUS/OTA accepts writes with no observed effect | USB verified on hardware; Bluetooth unsolved |
+| Rumble channels/strength/duration | **Solved on both transports.** USB: `05 0F <L> <R>` to `mi_02` (re-send <500 ms). Bluetooth: 4-byte `11 <L> <R> <dur_ms>` to NUS RX `6e400002` (re-send faster than `dur_ms`). Levels clamp to 250 | Verified on hardware (USB and Bluetooth) |
 | Simultaneous inputs | Not yet exercised | Untested |
 
 Observed DInput descriptor field order (not yet mapped against physical reports):

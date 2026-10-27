@@ -1,5 +1,12 @@
 # Firmware patch scoping: Bluetooth rumble on the Vader 3 Pro
 
+> **OBSOLETE.** No firmware patch is required. Bluetooth rumble works on stock
+> 6.7.5.1 with a 4-byte frame on the Nordic UART service. See
+> [bluetooth-rumble-solved.md](bluetooth-rumble-solved.md). This document is
+> retained as a record of the scoping work and of what the update mechanism
+> looks like, which remains relevant if a patch is ever needed for something
+> else.
+
 Scope assessment for adding a Bluetooth command path to firmware 6.7.5.1 so that
 rumble can be driven over the Bluetooth DInput link. This document records what
 a patch would have to change, what is and is not known about the update

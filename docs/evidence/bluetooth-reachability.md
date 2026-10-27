@@ -1,5 +1,15 @@
 # Reachability: can a Bluetooth write reach the rumble handler?
 
+> **RESOLVED, AND THE CONCLUSION BELOW WAS WRONG.** A GATT write does reach a
+> rumble handler — not the two analysed here, but `FUN_0000b830`, reached from
+> `FUN_00010980`. Bluetooth rumble works on stock firmware. See
+> [bluetooth-rumble-solved.md](bluetooth-rumble-solved.md).
+>
+> The reasoning error: this document searched for routes into `FUN_00018138`
+> and `FUN_000183c8` and concluded there were none, without enumerating the
+> other callers of the rumble primitive `FUN_0000b62c`. Doing that enumeration
+> is what found the working path.
+
 Static answer to the question left open by
 [firmware-patch-scoping.md](firmware-patch-scoping.md): is `FUN_00019fa4`
 reachable from a GATT write, or does Option A require a different route?

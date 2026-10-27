@@ -1,5 +1,12 @@
 # Queue topology: why Bluetooth commands cannot reach the dispatcher
 
+> **PARTLY SUPERSEDED.** The queue analysis below is accurate for
+> `FUN_00018138` and `FUN_000183c8`. But those are not the only dispatchers:
+> `FUN_0000b830`, reached from the GATT payload handler `FUN_00010980`, is a
+> separate path and it does deliver Bluetooth rumble. The conclusion that
+> Bluetooth rumble required a device-side change is withdrawn. See
+> [bluetooth-rumble-solved.md](bluetooth-rumble-solved.md).
+
 Static analysis of firmware 6.7.5.1 (`Telink87_For_F3_Ver6.7.5.1.bin`,
 SHA-256 `6cba3054…53e20a`, 152068 bytes) following the Bluetooth write path.
 This resolves the open question left by
@@ -111,24 +118,20 @@ writes land somewhere that does not feed the command dispatcher.
 
 ## Conclusion
 
-On firmware 6.7.5.1, **the Bluetooth link has no path to the command
-dispatcher.** Commands reach `FUN_00018138` only through the wired USB receive
-interrupt. This is a structural property of the transport wiring, not a framing
-mistake that a different byte sequence could fix.
+On firmware 6.7.5.1 the 20-byte `5A A5` command queue is fed only by the wired
+USB receive interrupt. See
+[bluetooth-rumble-solved.md](bluetooth-rumble-solved.md) for the Bluetooth path
+that does work: a 4-byte frame on the Nordic UART service, dispatched by
+`FUN_0000b830` rather than by `FUN_00018138`.
 
-Therefore, for Bluetooth DInput rumble on this build, the options are:
+~~Therefore, for Bluetooth DInput rumble on this build, the options are:~~
 
-1. **Host-side translation is impossible without a device-side change**, because
-   there is no Bluetooth command channel to translate into.
-2. **Firmware modification** is required to add a Bluetooth receive path into
-   `FUN_0001c468` / `FUN_00018138`, or to make the `0xBA` short-frame branch
-   reachable from a GATT write.
-3. **A different controller mode** whose Bluetooth link does have a command
-   channel — the Bluetooth XInput descriptor declares six output reports, unlike
-   DInput's zero.
+~~1. Host-side translation is impossible without a device-side change~~
+~~2. Firmware modification is required~~
+~~3. A different controller mode~~
 
-Option 3 is worth testing before any firmware work, because it requires no
-modification and the descriptor difference is already recorded.
+All three were written before the 4-byte GATT path was found and are
+**withdrawn**. No firmware change is needed for rumble.
 
 ## Caveats
 
