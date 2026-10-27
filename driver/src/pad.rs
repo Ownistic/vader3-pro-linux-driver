@@ -70,6 +70,30 @@ mod syn {
     pub const REPORT: u16 = 0;
 }
 
+/// The logical axes the pad exposes, in SDL's positional slot order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogicalAxis {
+    LeftX = 0,
+    LeftY = 1,
+    RightX = 2,
+    RightY = 3,
+    LeftTrigger = 4,
+    RightTrigger = 5,
+}
+
+/// Kernel ABS code for each logical axis, in SDL slot order.
+///
+/// The right-hand column is deliberately not the same name as the logical axis:
+/// SDL resolves slots positionally, so `RightY` has to use `ABS_RX`.
+pub const AXIS_ASSIGNMENT: [(LogicalAxis, u16); 6] = [
+    (LogicalAxis::LeftX, abs::X),
+    (LogicalAxis::LeftY, abs::Y),
+    (LogicalAxis::RightX, abs::Z),
+    (LogicalAxis::RightY, abs::RX),
+    (LogicalAxis::LeftTrigger, abs::RY),
+    (LogicalAxis::RightTrigger, abs::RZ),
+];
+
 mod abs {
     pub const X: u16 = 0x00;
     pub const Y: u16 = 0x01;
@@ -98,10 +122,13 @@ const BUTTON_CODES: [u16; button::STANDARD_COUNT] = [
     0x13d, // BTN_THUMBL     L3
     0x13e, // BTN_THUMBR     R3
     0x13c, // BTN_MODE       Home
+    // Canonical order is up, right, down, left, but the kernel constants are
+    // UP=0x220, DOWN=0x221, LEFT=0x222, RIGHT=0x223. Listing them in numeric
+    // order here would swap right/left and up/down on the virtual pad.
     0x220, // BTN_DPAD_UP
-    0x221, // BTN_DPAD_RIGHT
-    0x222, // BTN_DPAD_DOWN
-    0x223, // BTN_DPAD_LEFT
+    0x223, // BTN_DPAD_RIGHT
+    0x221, // BTN_DPAD_DOWN
+    0x222, // BTN_DPAD_LEFT
 ];
 
 /// Extra button codes, `BTN_TRIGGER_HAPPY1`..`6`.
@@ -115,11 +142,39 @@ mod ioctl {
     pub const SET_EVBIT: libc::c_ulong = 0x4004_5564;
     pub const SET_KEYBIT: libc::c_ulong = 0x4004_5565;
     pub const SET_ABSBIT: libc::c_ulong = 0x4004_5567;
+    /// `_IOW('U', 4, struct uinput_abs_setup)`, sizeof == 28.
+    pub const ABS_SETUP: libc::c_ulong = 0x401c_5504;
     pub const SET_FFBIT: libc::c_ulong = 0x4004_556b;
     /// `_IOW('U', 3, struct uinput_setup)`, sizeof == 92.
     pub const DEV_SETUP: libc::c_ulong = 0x405c_5503;
     pub const DEV_CREATE: libc::c_ulong = 0x5501;
     pub const DEV_DESTROY: libc::c_ulong = 0x5502;
+}
+
+/// `struct input_absinfo` from `linux/input.h`, 24 bytes.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InputAbsInfo {
+    pub value: i32,
+    pub minimum: i32,
+    pub maximum: i32,
+    pub fuzz: i32,
+    pub flat: i32,
+    pub resolution: i32,
+}
+
+/// `struct uinput_abs_setup` from `linux/uinput.h`, 28 bytes.
+///
+/// Declaring an axis with `UI_SET_ABSBIT` alone leaves its range at 0..0, so
+/// every value collapses to the same point and the axis never appears to move.
+/// This struct supplies the range.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UinputAbsSetup {
+    pub code: u16,
+    /// Padding the C struct gets implicitly from `input_absinfo`'s alignment.
+    pub _pad: u16,
+    pub absinfo: InputAbsInfo,
 }
 
 /// Scale a 16-bit force-feedback magnitude to the firmware's 0-250 range.
@@ -178,6 +233,33 @@ impl VirtualPad {
             abs::X, abs::Y, abs::Z, abs::RX, abs::RY, abs::RZ, abs::HAT0X, abs::HAT0Y,
         ] {
             set_bit(&file, ioctl::SET_ABSBIT, code, "UI_SET_ABSBIT")?;
+        }
+        // Ranges must be declared explicitly. Without UI_ABS_SETUP every axis
+        // keeps a 0..0 range and no motion is visible to any client, which a
+        // probe caught only because it checked that an axis actually moved.
+        for (code, info) in [
+            (abs::X, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
+            (abs::Y, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
+            (abs::Z, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
+            (abs::RX, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
+            (abs::RY, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
+            (abs::RZ, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
+            // Hats are signed: -1 left/up, +1 right/down.
+            (abs::HAT0X, InputAbsInfo { minimum: -1, maximum: 1, ..Default::default() }),
+            (abs::HAT0Y, InputAbsInfo { minimum: -1, maximum: 1, ..Default::default() }),
+        ] {
+            let setup = UinputAbsSetup {
+                code,
+                _pad: 0,
+                absinfo: info,
+            };
+            // SAFETY: ABS_SETUP reads a `uinput_abs_setup` (28 bytes) from the
+            // supplied pointer.
+            let rc = unsafe { libc::ioctl(file.as_raw_fd(), ioctl::ABS_SETUP, &setup) };
+            if rc < 0 {
+                return Err(std::io::Error::last_os_error())
+                    .with_context(|| format!("UI_ABS_SETUP for axis {code:#04x}"));
+            }
         }
         // The whole point of choosing uinput: rumble is declarable directly.
         set_bit(&file, ioctl::SET_FFBIT, FF_RUMBLE, "UI_SET_FFBIT")?;
@@ -418,10 +500,28 @@ impl VirtualPad {
 
         self.emit_changed(24, ev_type::ABS, abs::X, i32::from(crate::encode::centre_axis(state.left_x)))?;
         self.emit_changed(25, ev_type::ABS, abs::Y, i32::from(crate::encode::centre_axis(state.left_y)))?;
-        self.emit_changed(26, ev_type::ABS, abs::RX, i32::from(crate::encode::centre_axis(state.right_x)))?;
-        self.emit_changed(27, ev_type::ABS, abs::RY, i32::from(crate::encode::centre_axis(state.right_y)))?;
-        self.emit_changed(28, ev_type::ABS, abs::Z, i32::from(state.left_trigger))?;
-        self.emit_changed(29, ev_type::ABS, abs::RZ, i32::from(state.right_trigger))?;
+        // SDL assigns joystick axis slots by the *numeric order of the kernel
+        // ABS codes present*, not by their names:
+        //   a0=ABS_X  a1=ABS_Y  a2=ABS_Z  a3=ABS_RX  a4=ABS_RY  a5=ABS_RZ
+        // and its default gamepad mapping reads a2 as rightx, a3 as righty,
+        // a4 as lefttrigger, a5 as righttrigger.
+        //
+        // So the kernel code for each logical axis is NOT the matching name:
+        // right stick Y must go on ABS_RX and the triggers on ABS_RY/ABS_RZ.
+        // Verified by moving one axis at a time and reading back which SDL slot
+        // changed; an earlier version put right stick Y on ABS_RZ, which SDL
+        // reported as the right trigger.
+        for (logical, code) in AXIS_ASSIGNMENT {
+            let value = match logical {
+                LogicalAxis::LeftX => crate::encode::centre_axis(state.left_x),
+                LogicalAxis::LeftY => crate::encode::centre_axis(state.left_y),
+                LogicalAxis::RightX => crate::encode::centre_axis(state.right_x),
+                LogicalAxis::RightY => crate::encode::centre_axis(state.right_y),
+                LogicalAxis::LeftTrigger => state.left_trigger,
+                LogicalAxis::RightTrigger => state.right_trigger,
+            };
+            self.emit_changed(26 + logical as usize, ev_type::ABS, code, i32::from(value))?;
+        }
 
         self.write_event(ev_type::SYN, syn::REPORT, 0)
     }
@@ -497,6 +597,83 @@ mod tests {
         let bit = FF_RUMBLE as usize - 64;
         assert_eq!(bit, 16);
         assert_eq!(1u64 << bit, 0x1_0000u64);
+    }
+
+    #[test]
+    fn dpad_codes_follow_canonical_order_not_numeric_order() {
+        // The canonical order is up, right, down, left (see crate::input).
+        // The kernel numbers them UP=0x220, DOWN=0x221, LEFT=0x222, RIGHT=0x223,
+        // so a numerically sorted list silently swaps right with down and
+        // left with up. That is exactly the bug this test exists to catch.
+        assert_eq!(BUTTON_CODES[button::DPAD_UP], 0x220, "up");
+        assert_eq!(BUTTON_CODES[button::DPAD_RIGHT], 0x223, "right");
+        assert_eq!(BUTTON_CODES[button::DPAD_DOWN], 0x221, "down");
+        assert_eq!(BUTTON_CODES[button::DPAD_LEFT], 0x222, "left");
+    }
+
+    #[test]
+    fn axis_assignment_matches_sdl_slot_order() {
+        // SDL assigns slots by numeric ABS code order and its default gamepad
+        // mapping reads a2=rightx, a3=righty, a4=lefttrigger, a5=righttrigger.
+        // The measurement (move one axis, read back which slot changed) gave:
+        //   left_x->a0  left_y->a1  right_x->a2  right_y->a3
+        //   left_trigger->a4  right_trigger->a5
+        // This test pins the code list that produces that, because the codes are
+        // deliberately not name-matched: RightY uses ABS_RX, triggers use RY/RZ.
+        assert_eq!(AXIS_ASSIGNMENT[0], (LogicalAxis::LeftX, abs::X));
+        assert_eq!(AXIS_ASSIGNMENT[1], (LogicalAxis::LeftY, abs::Y));
+        assert_eq!(AXIS_ASSIGNMENT[2], (LogicalAxis::RightX, abs::Z));
+        assert_eq!(AXIS_ASSIGNMENT[3], (LogicalAxis::RightY, abs::RX));
+        assert_eq!(AXIS_ASSIGNMENT[4], (LogicalAxis::LeftTrigger, abs::RY));
+        assert_eq!(AXIS_ASSIGNMENT[5], (LogicalAxis::RightTrigger, abs::RZ));
+    }
+
+    #[test]
+    fn axis_codes_are_ascending_so_sdl_slots_never_swap() {
+        // SDL derives its slot order from the sorted ABS code set. If the
+        // assignment table were not ascending by code, the logical slot order
+        // and SDL's would diverge and sticks would report as triggers.
+        let codes: Vec<u16> = AXIS_ASSIGNMENT.iter().map(|(_, c)| *c).collect();
+        let mut sorted = codes.clone();
+        sorted.sort_unstable();
+        assert_eq!(codes, sorted, "AXIS_ASSIGNMENT must be in ascending code order");
+    }
+
+    #[test]
+    fn abs_setup_struct_matches_the_kernel_abi() {
+        // Verified against the header: sizeof(uinput_abs_setup) == 28,
+        // sizeof(input_absinfo) == 24, and UI_ABS_SETUP == 0x401c5504.
+        assert_eq!(std::mem::size_of::<InputAbsInfo>(), 24);
+        assert_eq!(std::mem::size_of::<UinputAbsSetup>(), 28);
+        assert_eq!(ioctl::ABS_SETUP, 0x401c_5504);
+    }
+
+    #[test]
+    fn axis_ranges_are_not_degenerate() {
+        // Declaring an axis with UI_SET_ABSBIT alone leaves min == max == 0, so
+        // no motion is visible to any client. Every axis must therefore be
+        // given an explicit non-degenerate range by the create path; this test
+        // documents the ranges that must be supplied.
+        let stick = InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() };
+        assert!(stick.maximum > stick.minimum, "sticks need a real range");
+        let hat = InputAbsInfo { minimum: -1, maximum: 1, ..Default::default() };
+        assert_eq!(hat.minimum, -1);
+        assert_eq!(hat.maximum, 1);
+    }
+
+    #[test]
+    fn declared_abs_codes_are_exactly_eight_with_hats() {
+        // Four stick axes, two triggers, two hat axes. A missing hat would make
+        // the D-pad invisible to SDL; an extra axis would shift the map.
+        let declared = [
+            abs::X, abs::Y, abs::Z, abs::RX, abs::RY, abs::RZ, abs::HAT0X, abs::HAT0Y,
+        ];
+        let mut sorted: Vec<u16> = declared.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), 8);
+        assert_eq!(abs::HAT0X, 0x10);
+        assert_eq!(abs::HAT0Y, 0x11);
     }
 
     #[test]

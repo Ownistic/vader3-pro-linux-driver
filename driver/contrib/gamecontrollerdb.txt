@@ -1,0 +1,45 @@
+# SDL controller mapping for the translated Vader 3 Pro pad.
+#
+# SDL ships a default mapping for generic gamepads that covers the 15 standard
+# buttons. It does NOT bind buttons 15-20, so the six extras (C, Z, M1-M4) exist
+# as joystick buttons but are invisible as gamepad controls — which is exactly
+# what a plain Steam session shows. Measured on this system:
+#
+#   default:  UNBOUND = misc1, paddle1, paddle2, paddle3, paddle4, touchpad
+#   this map: all 21 bound
+#
+# Steam reads SDL mappings from SDL_GAMECONTROLLERCONFIG (one line) or from a
+# gamecontrollerdb.txt. Steam's own file lives at:
+#   ~/.steam/steam/controller_base/gamecontrollerdb.txt
+#
+# The GUID below belongs to the pad this daemon creates: bus 3 (USB), vendor
+# 0x1d6b, product 0, version 0x0100 — the values uinput assigns, which is why it
+# is stable across runs and does not need to be regenerated per device.
+#
+# Button layout of the virtual pad:
+#   jbtn 0-3    A B X Y
+#   jbtn 4-5    LB RB
+#   jbtn 6-8    Select Start Home
+#   jbtn 9-10   L3 R3
+#   jbtn 11     D-pad up
+#   jbtn 12     D-pad down
+#   jbtn 13     D-pad left
+#   jbtn 14     D-pad right
+#   jbtn 15     C      -> misc1
+#   jbtn 16     Z      -> touchpad
+#   jbtn 17-20  M1 M2 M3 M4 -> paddle1..paddle4
+#
+# Every index above was measured by pressing one control at a time and reading
+# back which joystick button changed; see
+# docs/evidence/virtual-pad-signal-routing.md. Note the D-pad order: jbtn14 is
+# RIGHT, because the kernel numbers UP=0x220 DOWN=0x221 LEFT=0x222 RIGHT=0x223
+# while this project's canonical order is up, right, down, left.
+#
+# misc1/touchpad are used for C and Z because SDL 2.0's controller model has no
+# dedicated "extra face button" slot; they are distinct bindable inputs, which is
+# what matters for remapping in Steam. M1-M4 map to paddle1-4, which is the slot
+# SDL defines for exactly this purpose.
+#
+# Regenerate the GUID with:
+#   cargo run --example sdl_probe   # prints GUID for the translated pad
+0300d0f86b1d00000100000000010000,Flydigi Vader 3 Pro (translated),a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,back:b6,start:b7,guide:b8,leftstick:b9,rightstick:b10,dpup:b11,dpdown:b12,dpleft:b13,dpright:b14,misc1:b15,touchpad:b16,paddle1:b17,paddle2:b18,paddle3:b19,paddle4:b20,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,platform:Linux,
