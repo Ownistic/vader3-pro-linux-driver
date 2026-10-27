@@ -15,13 +15,15 @@ details and evidence follow below.
 | Duplicate physical controller suppressed | Working (`EVIOCGRAB`, crash-safe) |
 | Input latency through translator | Measured **0.03 ms** median |
 | Steam recognition of the six extras | **Untested** — needs the mapping file and a Steam run |
-| Native gyro | **Not implemented** — absent from the Bluetooth DInput stream |
+| Native gyro | **Deferred to post-1.0** — absent from the Bluetooth DInput stream, and the vendor-mode switch is not reachable on the working channel |
 
 Phases 02 (input prototype) and 05 (rumble) are effectively **complete**. Phase 03
 (Steam integration) is implemented but its Steam-side acceptance check has not
-been run, so it stays open. Phase 04 (motion) is not started and is blocked by a
-protocol limitation rather than by effort. Phase 00 was independently
-verified/converged; its record is `docs/phases/00-setup.md`.
+been run, so it stays open. Phase 04 (motion) is **deferred to after 1.0**: the
+blocker is transport reachability of a single firmware flag, not effort, and
+`docs/evidence/gyro-deferred.md` records the three candidate routes so the work
+does not restart from scratch. Phase 00 was independently verified/converged; its
+record is `docs/phases/00-setup.md`.
 
 Everything recorded below this section is the historical evidence trail from
 research, retained because it is the basis for the corrections made later. Where

@@ -17,7 +17,7 @@ implementation needed no upstream contract to negotiate.
 | [01: Research](docs/phases/01-research.md) | Upstream/license comparison, static Windows/firmware evidence, Bluetooth captures, architecture decision | **Substantially complete.** Protocol fully mapped, firmware disassembled, rumble solved. Steam-side experiment remains. |
 | 02: Input prototype | Verified physical parser, virtual pad, ordinary/extra input tests | **Complete.** 21 buttons + 6 axes verified; latency measured |
 | 03: Steam integration | M1–M4/C/Z independently assignable; no duplicate device | **Implemented, unverified in Steam.** Mapping file shipped; needs a Steam run |
-| 04: Motion | Calibrated sensor decoding/orientation and native Steam gyro | **Blocked.** No motion data exists in the Bluetooth DInput stream |
+| 04: Motion | Calibrated sensor decoding/orientation and native Steam gyro | **Deferred to post-1.0.** No motion data in the Bluetooth DInput stream, and the vendor-mode switch is not reachable from the working GATT channel. Resume from `docs/evidence/gyro-deferred.md` |
 | 05: Rumble | Bluetooth vibration or evidence establishing the exact limitation | **Complete.** Solved via a 4-byte Nordic UART frame; no limitation remains |
 | 06: Stabilization | Reconnects, sleep, permissions, service, install/uninstall | **Partially complete.** Permissions, systemd unit and docs done; reconnect behaviour and Bazzite install flow untested |
 

@@ -92,7 +92,7 @@ Two consequences worth knowing, because both look like missing features:
 | Duplicate physical controller suppressed | Verified |
 | Input latency | Measured at **0.03 ms** through the translator |
 | **Recognition inside Steam** | **Not yet verified** |
-| Native gyro | Not implemented — see [limitations](#known-limitations) |
+| Native gyro | Deferred to post-1.0 — see [limitations](#known-limitations) |
 
 Everything above is measured at the kernel and SDL level. What has *not* been
 confirmed is how Steam itself presents the six extra buttons in its controller
@@ -436,11 +436,15 @@ Idle CPU cost is 0.6% of one core.
 
 ## Known limitations
 
-- **No native gyro.** The Bluetooth DInput stream carries no motion data at all —
-  verified by shaking the controller and observing bytes 1–4 stay put (they are
-  the sticks). Gyro exists only in a vendor mode switched by `05 EE 01`, which was
-  never confirmed over Bluetooth and whose exploration once reset the controller's
-  Bluetooth bond. Not attempted further, by choice.
+- **No native gyro yet.** The Bluetooth DInput stream carries no motion data —
+  verified by shaking the controller and observing bytes 1–4 stay put (they are the
+  sticks). Motion exists only in a vendor mode toggled by `05 EE 01`, and that
+  command is not reachable from the Bluetooth channel that carries rumble. Deferred
+  to after 1.0 rather than dropped;
+  [docs/evidence/gyro-deferred.md](docs/evidence/gyro-deferred.md) records the
+  code paths, the reason each route fails, and where the work should resume.
+  Do not retry the `0x13` path without a pairing-recovery plan — it once reset this
+  controller's Bluetooth bond.
 - **Steam recognition of the six extras is unverified.** The mapping file is
   built from measured indices and works with local SDL; Steam bundles its own SDL,
   so it needs confirming there.
