@@ -160,10 +160,14 @@ sweep with periodic A taps, 25 s window, over Bluetooth DInput.
 | Virtual event rate | 324 /s |
 | Report interval median | 7.61 ms |
 | Report interval p95 | 8.95 ms |
-| **Button latency median** | **2.67 ms** |
-| **Button latency p95** | **4.00 ms** |
-| Button latency max | 4.10 ms |
-| Button latency min | 0.16 ms |
+| Button latency median (before) | 2.67 ms |
+| Button latency p95 (before) | 4.00 ms |
+| Button latency max (before) | 4.10 ms |
+| Button latency min (before) | 0.16 ms |
+| **Button latency median (after)** | **0.03 ms** |
+| **Button latency p95 (after)** | **0.10 ms** |
+| Button latency max (after) | 0.11 ms |
+| Button latency min (after) | 0.02 ms |
 
 ### The 4 ms figure was the sleep, not the device
 
@@ -177,6 +181,22 @@ wakes the loop the moment a report arrives, and the timeout only bounds
 housekeeping. Idle CPU cost after the change measured **0.6% of one core**
 (3 ticks over 5 s), so blocking wait costs nothing when nothing happens.
 
+Re-measured after the change, same procedure, 37 paired presses:
+
+| | before | after |
+| --- | --- | --- |
+| median | 2.67 ms | **0.03 ms** |
+| p95 | 4.00 ms | **0.10 ms** |
+| max | 4.10 ms | **0.11 ms** |
+
+The quantisation is gone: p95 and max no longer sit on 4 ms, and the spread is
+now tight (0.02–0.11 ms) rather than a flat 4 ms plateau. That is the signature
+of a wait that ends on the event instead of on a timer.
+
+Translator overhead is therefore about **0.03 ms**, roughly 250× below the
+device's own 7.6 ms report interval. Input latency is now dominated entirely by
+the controller and the Bluetooth link, not by this software.
+
 ### Reading these numbers correctly
 
 - **128 reports/s is the device's rate, not a cap.** The controller is
@@ -185,6 +205,10 @@ housekeeping. Idle CPU cost after the change measured **0.6% of one core**
   than the axis changes — the rate reflects motion, not a polling clock.
 - **Virtual events exceed physical reports** because each report expands into
   several evdev events (axes plus a `SYN_REPORT`), which is expected.
-- **`max 217 ms` report interval** is a stall in the *device's* reporting, not the
-  translator. It appears once in 25 s and coincides with the radio link, not with
-  any host-side work.
+- **Report-interval outliers (217 ms, then 134 ms) are stalls in the *device's*
+  reporting**, not the translator. They appear roughly once per 25 s, coincide
+  with the radio link, and do not affect the measured button latency — which
+  stayed at 0.11 ms max across the same run. They are worth watching only if
+  they show up as a visible stick freeze during play.
+- **255 distinct left-stick-X values** were seen in the 3272 reports of the
+  post-fix run, i.e. the full 8-bit range. No resolution is lost in translation.
