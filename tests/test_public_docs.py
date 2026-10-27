@@ -123,6 +123,19 @@ def test_readme_does_not_claim_steam_is_verified():
     )
 
 
+def test_readme_states_pre_1_0_status_at_the_top():
+    """A reader must learn the API is unstable before reading install steps.
+
+    The promise "interface may change until 1.0" is only useful if it appears
+    before someone has already built against it, so it is checked to be in the
+    first screenful rather than merely present somewhere.
+    """
+    head = _readme()[:1500]
+    assert "pre-1.0" in head or "under active development" in head, (
+        "the README must state the pre-1.0 status near the top"
+    )
+
+
 def test_readme_does_not_hardcode_test_counts():
     """Test counts rot; the README said 37 Python tests when there were 48.
 

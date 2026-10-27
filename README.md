@@ -1,5 +1,13 @@
 # Vader 3 Pro Linux Driver
 
+> **Status: pre-1.0, under active development.**
+>
+> Everything here works, but the interface — configuration keys, CLI flags, the
+> virtual pad's identity, and the install steps — may still change without a
+> migration path until version 1.0. Steam recognition of the six extra buttons is
+> not yet verified; see [Status](#status). Expect rough edges and treat every
+> version before 1.0 as a preview.
+
 Makes a **Flydigi Vader 3 Pro connected over Bluetooth** work as a complete
 controller in **Steam Input** on Linux — including the six extra buttons (M1, M2,
 M3, M4, C, Z) and real rumble.
