@@ -16,6 +16,58 @@ class DescriptorFixtureTests(unittest.TestCase):
                 self.assertEqual(fixture["kind"], "recorded-hid-report-descriptor-not-input-reports")
 
 
+class MKeyOrderFixtureTests(unittest.TestCase):
+    """The M1-M4 bit order, owner-confirmed by ordered single-key presses.
+
+    This replaces a table-derived assignment: a coordinated multi-key run could
+    not confirm press order and once reported M2 where M4 was expected.
+    """
+
+    def setUp(self):
+        path = Path(__file__).parent / "fixtures" / "vader3pro-bluetooth-dinput-mkeys.json"
+        self.fixture = json.loads(path.read_text())
+        self.packets = [bytes.fromhex(row["hex"]) for row in self.fixture["reports"]]
+
+    def test_fixture_shape(self):
+        self.assertEqual(self.fixture["kind"], "recorded-passive-hidraw-input")
+        self.assertEqual(self.fixture["report_bytes"], 21)
+        self.assertTrue(self.packets)
+        for packet in self.packets:
+            self.assertEqual(len(packet), 21)
+            self.assertEqual(packet[0], 1)
+
+    def test_declared_mapping_matches_the_specified_order(self):
+        self.assertEqual(
+            self.fixture["observed_byte11"],
+            {"M1": "04", "M2": "08", "M3": "10", "M4": "20"},
+        )
+
+    def test_each_press_sets_exactly_one_m_bit(self):
+        for packet in self.packets:
+            mask = packet[11] & 0x3C
+            if mask:
+                self.assertEqual(mask & (mask - 1), 0, f"{mask:#04x} is not one bit")
+
+    def test_key_order_follows_the_coordinated_sequence(self):
+        order = []
+        for packet in self.packets:
+            mask = packet[11] & 0x3C
+            if mask and (not order or order[-1] != mask):
+                order.append(mask)
+        distinct = []
+        for mask in order:
+            if mask not in distinct:
+                distinct.append(mask)
+        self.assertEqual(distinct, [0x04, 0x08, 0x10, 0x20])
+
+    def test_m_presses_do_not_set_standard_buttons(self):
+        for packet in self.packets:
+            if packet[11] & 0x3C:
+                self.assertEqual(packet[9] & 0xF0, 0, "M press set a face button")
+                self.assertEqual(packet[10], 0, "M press set a shoulder/menu button")
+                self.assertEqual(packet[9] & 0x0F, 0, "M press set the D-pad hat")
+
+
 class InputFixtureTests(unittest.TestCase):
     def setUp(self):
         path = Path(__file__).parent / "fixtures" / "vader3pro-bluetooth-dinput-abcz.json"

@@ -29,6 +29,25 @@ pub const VENDOR_ID: u16 = 0xd7d7;
 /// Product ID of the Vader 3 Pro.
 pub const PRODUCT_ID: u16 = 0x0041;
 
+/// PnP IDs the same firmware can advertise.
+///
+/// The controller's own PnP ID characteristic reported `04b4:2412` (Cypress)
+/// on a connection whose report descriptor was byte-identical to the DInput
+/// capture. Discovery therefore cannot rely on VID/PID alone: the descriptor is
+/// the reliable identity, and the ID is advisory.
+pub const ALT_VENDOR_IDS: [u16; 1] = [0x04b4];
+
+/// SHA-256 of the Bluetooth DInput report descriptor.
+///
+/// Established from the capture and independently confirmed against the device
+/// firmware image at offset `0x23764`. Matching on this digest identifies the
+/// DInput personality regardless of what PnP ID the firmware advertises.
+pub const DINPUT_DESCRIPTOR_SHA256: &str =
+    "227924e94560bea5149d6a75a8bb225143a1e4b0685075dea729a30649bc1f22";
+
+/// Length of the Bluetooth DInput report descriptor in bytes.
+pub const DINPUT_DESCRIPTOR_LEN: usize = 163;
+
 /// `HIDIOCGRAWINFO` ioctl request number.
 const HIDIOCGRAWINFO: libc::c_ulong = 0x8008_4803;
 
@@ -179,7 +198,7 @@ pub fn discover_detailed(vendor: u16, product: u16) -> Vec<HidrawNode> {
         }
 
         let name = entry.file_name();
-        let path = Path::new("/dev/hidraw").join(&name);
+        let path = Path::new("/dev").join(&name);
         let interface = entry
             .path()
             .join("device")
@@ -190,7 +209,10 @@ pub fn discover_detailed(vendor: u16, product: u16) -> Vec<HidrawNode> {
         found.push(HidrawNode {
             path,
             bus: bus.unwrap_or(0),
+            vendor,
+            product,
             interface,
+            descriptor_match: false,
         });
     }
 
@@ -198,13 +220,209 @@ pub fn discover_detailed(vendor: u16, product: u16) -> Vec<HidrawNode> {
     found
 }
 
+/// Discover every hidraw node that looks like a Vader 3 Pro.
+///
+/// A node is a candidate when **either** its vendor/product pair matches a
+/// known Flydigi or alternate ID, **or** its report descriptor digest matches the
+/// recorded DInput descriptor. The second condition is what actually matters:
+/// a real connection was observed advertising Cypress IDs (`04b4:2412`) while
+/// serving the genuine DInput descriptor, which a VID/PID match alone would
+/// reject.
+#[must_use]
+pub fn discover_candidates() -> Vec<HidrawNode> {
+    let mut found = Vec::new();
+    let dir = match std::fs::read_dir("/sys/class/hidraw") {
+        Ok(d) => d,
+        Err(_) => return found,
+    };
+
+    for entry in dir.flatten() {
+        let uevent = entry.path().join("device/uevent");
+        let Ok(text) = std::fs::read_to_string(&uevent) else {
+            continue;
+        };
+
+        let mut hid_id = None;
+        let mut name = None;
+        for line in text.lines() {
+            if let Some(rest) = line.strip_prefix("HID_ID=") {
+                hid_id = Some(rest.to_string());
+            } else if let Some(rest) = line.strip_prefix("HID_NAME=") {
+                name = Some(rest.to_string());
+            }
+        }
+        let Some(hid_id) = hid_id else { continue };
+
+        let mut parts = hid_id.split(':');
+        let bus = parts.next().and_then(|s| u32::from_str_radix(s, 16).ok()).unwrap_or(0);
+        let vid = parts.next().and_then(|s| u32::from_str_radix(s, 16).ok()).unwrap_or(0) as u16;
+        let pid = parts.next().and_then(|s| u32::from_str_radix(s, 16).ok()).unwrap_or(0) as u16;
+
+        let id_match = (vid == VENDOR_ID && pid == PRODUCT_ID) || ALT_VENDOR_IDS.contains(&vid);
+        let name_match = name
+            .as_deref()
+            .is_some_and(|n| n.to_ascii_lowercase().contains("vader3"));
+
+        // Read the descriptor only when the cheap checks did not already match,
+        // to avoid opening descriptors for every mouse on the system.
+        let descriptor_match = if id_match || name_match {
+            false
+        } else {
+            descriptor_digest_matches(&entry.path())
+        };
+
+        if !(id_match || name_match || descriptor_match) {
+            continue;
+        }
+
+        let hidraw_name = entry.file_name();
+        let path = Path::new("/dev").join(&hidraw_name);
+        let interface = entry
+            .path()
+            .join("device")
+            .canonicalize()
+            .ok()
+            .and_then(|p| interface_from_path(&p));
+
+        found.push(HidrawNode {
+            path,
+            bus,
+            vendor: vid,
+            product: pid,
+            interface,
+            descriptor_match,
+        });
+    }
+
+    // Prefer a genuine descriptor match over an ID match, then take a stable
+    // order so repeated runs pick the same node.
+    found.sort_by(|a, b| {
+        b.descriptor_match
+            .cmp(&a.descriptor_match)
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    found
+}
+
+/// True when the node's report descriptor is byte-identical to the recorded
+/// Bluetooth DInput descriptor.
+///
+/// Only the length is checked before hashing, so a wrong-sized descriptor is
+/// rejected without reading its contents into a hash.
+fn descriptor_digest_matches(hidraw_sysfs: &Path) -> bool {
+    let path = hidraw_sysfs.join("device/report_descriptor");
+    let Ok(bytes) = std::fs::read(&path) else {
+        return false;
+    };
+    if bytes.len() != DINPUT_DESCRIPTOR_LEN {
+        return false;
+    }
+    sha256_hex(&bytes) == DINPUT_DESCRIPTOR_SHA256
+}
+
+/// Minimal SHA-256, so descriptor identity needs no dependency.
+///
+/// A full crypto library is not justified for one fixed comparison, and this
+/// keeps the release binary small. The implementation follows FIPS 180-4.
+#[must_use]
+pub fn sha256_hex(data: &[u8]) -> String {
+    const K: [u32; 64] = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+        0xc67178f2,
+    ];
+    let mut h: [u32; 8] = [
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+        0x5be0cd19,
+    ];
+
+    let mut message = data.to_vec();
+    let bit_len = (data.len() as u64) * 8;
+    message.push(0x80);
+    while message.len() % 64 != 56 {
+        message.push(0);
+    }
+    message.extend_from_slice(&bit_len.to_be_bytes());
+
+    for chunk in message.chunks_exact(64) {
+        let mut w = [0u32; 64];
+        for i in 0..16 {
+            w[i] = u32::from_be_bytes([
+                chunk[i * 4],
+                chunk[i * 4 + 1],
+                chunk[i * 4 + 2],
+                chunk[i * 4 + 3],
+            ]);
+        }
+        for i in 16..64 {
+            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[i - 7])
+                .wrapping_add(s1);
+        }
+
+        let (mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh) =
+            (h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+        for i in 0..64 {
+            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+            let ch = (e & f) ^ ((!e) & g);
+            let t1 = hh
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(K[i])
+                .wrapping_add(w[i]);
+            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+            let maj = (a & b) ^ (a & c) ^ (b & c);
+            let t2 = s0.wrapping_add(maj);
+            hh = g;
+            g = f;
+            f = e;
+            e = d.wrapping_add(t1);
+            d = c;
+            c = b;
+            b = a;
+            a = t1.wrapping_add(t2);
+        }
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
+        h[5] = h[5].wrapping_add(f);
+        h[6] = h[6].wrapping_add(g);
+        h[7] = h[7].wrapping_add(hh);
+    }
+
+    let mut out = String::with_capacity(64);
+    for word in h {
+        for byte in word.to_be_bytes() {
+            use core::fmt::Write as _;
+            let _ = write!(out, "{byte:02x}");
+        }
+    }
+    out
+}
+
 /// A discovered hidraw node with transport detail.
 #[derive(Debug, Clone)]
 pub struct HidrawNode {
     pub path: PathBuf,
     pub bus: u32,
+    pub vendor: u16,
+    pub product: u16,
     /// USB interface number, when the sysfs path exposes one.
     pub interface: Option<u8>,
+    /// True when identified by report-descriptor digest rather than by ID.
+    pub descriptor_match: bool,
 }
 
 impl HidrawNode {
@@ -264,7 +482,7 @@ pub fn discover(vendor: u16, product: u16) -> Vec<PathBuf> {
         let pid = parts.next().and_then(|s| u32::from_str_radix(s, 16).ok());
         if vid.map(|v| v as u16) == Some(vendor) && pid.map(|p| p as u16) == Some(product) {
             let name = entry.file_name();
-            found.push(Path::new("/dev/hidraw").join(name));
+            found.push(Path::new("/dev").join(name));
         }
     }
 
@@ -281,6 +499,25 @@ mod tests {
         // Bluetooth DInput identity established from real hardware.
         assert_eq!(VENDOR_ID, 0xd7d7);
         assert_eq!(PRODUCT_ID, 0x0041);
+    }
+
+    #[test]
+    fn alternate_vendor_id_is_accepted() {
+        // Observed on a real connection: the same firmware advertised Cypress
+        // IDs while serving the DInput descriptor.
+        assert!(ALT_VENDOR_IDS.contains(&0x04b4));
+    }
+
+    #[test]
+    fn descriptor_digest_is_a_full_sha256() {
+        assert_eq!(DINPUT_DESCRIPTOR_SHA256.len(), 64);
+        assert!(DINPUT_DESCRIPTOR_SHA256.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn descriptor_length_matches_the_capture() {
+        // The wrapper's descriptor is 163 bytes including the report ID item.
+        assert_eq!(DINPUT_DESCRIPTOR_LEN, 163);
     }
 
     #[test]

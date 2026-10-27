@@ -165,7 +165,7 @@ impl Translator {
     pub fn start(cfg: Config) -> Result<Self> {
         let log = Logger::new(&cfg.log_level);
 
-        let candidates = device::discover_detailed(cfg.vendor_id, cfg.product_id);
+        let candidates = device::discover_candidates();
         let path = candidates
             .first()
             .with_context(|| {
@@ -178,10 +178,17 @@ impl Translator {
 
         log_info!(
             log,
-            "physical device: {} (bus {:#x}, interface {:?})",
+            "physical device: {} ({:04x}:{:04x}, bus {:#x}, interface {:?}, {})",
             path.path.display(),
+            path.vendor,
+            path.product,
             path.bus,
-            path.interface
+            path.interface,
+            if path.descriptor_match {
+                "matched by descriptor"
+            } else {
+                "matched by id"
+            }
         );
         let path = path.path;
         let physical = device::PhysicalDevice::open(&path)?;
@@ -214,15 +221,7 @@ impl Translator {
             RumbleSink::Usb { path: hidraw_path }
         };
 
-        let mut virtual_pad = pad::VirtualPad::create(&cfg.virtual_name)?;
-        // The FF upload handshake needs the evdev node, so attach it now. A
-        // failure here costs rumble but not input, which is the right trade.
-        if cfg.rumble {
-            match virtual_pad.attach_event_node() {
-                Ok(()) => log_info!(log, "force feedback attached"),
-                Err(e) => log_warn!(log, "force feedback unavailable: {e:#}"),
-            }
-        }
+        let virtual_pad = pad::VirtualPad::create(&cfg.virtual_name)?;
         log_info!(log, "virtual pad created: {}", cfg.virtual_name);
 
         Ok(Self {
@@ -249,6 +248,7 @@ impl Translator {
                 Ok(Some(state)) => {
                     if state != self.last_state {
                         self.last_state = state;
+                        log_debug!(self.log, "state: {}", describe(&state));
                         self.virtual_pad.send(&state)?;
                     }
                 }
@@ -368,7 +368,36 @@ pub fn run(config_path: Option<&Path>) -> Result<()> {
         );
     }
 
-    translator.run(|| RUNNING.load(std::sync::atomic::Ordering::SeqCst))
+    // The loop runs `while !should_stop()`, so the closure must report
+    // "stop" by returning true.
+    translator.run(|| !RUNNING.load(std::sync::atomic::Ordering::SeqCst))
+}
+
+/// Render a state as pressed control names, for debugging and acceptance
+/// checks. Only pressed controls are listed, so a change is readable at a glance.
+#[must_use]
+pub fn describe(state: &State) -> String {
+    let mut parts = Vec::new();
+    for (idx, name) in input::STANDARD_NAMES.iter().enumerate() {
+        if state.button(idx) {
+            parts.push(*name);
+        }
+    }
+    for (idx, name) in input::EXTRA_NAMES.iter().enumerate() {
+        if state.extra(idx) {
+            parts.push(*name);
+        }
+    }
+    let sticks = format!(
+        "lx={:#04x} ly={:#04x} rx={:#04x} ry={:#04x} lt={:#04x} rt={:#04x}",
+        state.left_x, state.left_y, state.right_x, state.right_y,
+        state.left_trigger, state.right_trigger
+    );
+    if parts.is_empty() {
+        format!("none | {sticks}")
+    } else {
+        format!("{} | {sticks}", parts.join("+"))
+    }
 }
 
 static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);

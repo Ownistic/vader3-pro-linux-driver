@@ -1,0 +1,159 @@
+{
+  "kind": "recorded-passive-hidraw-input",
+  "controller": "Flydigi Vader 3 Pro (owner-confirmed)",
+  "mode": "Bluetooth DInput",
+  "vendor": "04b4 (advertised PnP ID)",
+  "product": "2412",
+  "descriptor_sha256": "227924e94560bea5149d6a75a8bb225143a1e4b0685075dea729a30649bc1f22",
+  "report_bytes": 21,
+  "capture_method": "O_RDONLY nonblocking hidraw read; no grabs, no output commands",
+  "owner_action": "Pressed M1 three times, then M2, then M3, then M4, one key per step with confirmation between steps",
+  "annotation_limit": "Establishes the M-key bit order only; not a physical-position test",
+  "sanitization": "Only report bytes and relative monotonic times retained; no addresses, serials, node or host paths",
+  "expected_order": [
+    "M1",
+    "M1",
+    "M1",
+    "M2",
+    "M2",
+    "M2",
+    "M3",
+    "M3",
+    "M3",
+    "M4",
+    "M4",
+    "M4"
+  ],
+  "observed_byte11": {
+    "M1": "04",
+    "M2": "08",
+    "M3": "10",
+    "M4": "20"
+  },
+  "reports": [
+    {
+      "elapsed_ns": 12213000000,
+      "hex": "0101fdfdfd000000000000040000008400ec698400"
+    },
+    {
+      "elapsed_ns": 12355000000,
+      "hex": "0101fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 12971000000,
+      "hex": "0101fdfdfd000000000000040000008400ec698400"
+    },
+    {
+      "elapsed_ns": 13098000000,
+      "hex": "0101fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 14567000000,
+      "hex": "0101fdfdfd000000000000040000008400ec698400"
+    },
+    {
+      "elapsed_ns": 14718000000,
+      "hex": "0101fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 21295000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 34945000000,
+      "hex": "0100fdfdfd000000000000080000008400ec698400"
+    },
+    {
+      "elapsed_ns": 35065000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 35823000000,
+      "hex": "0100fdfdfd000000000000080000008400ec698400"
+    },
+    {
+      "elapsed_ns": 35935000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 36769000000,
+      "hex": "0100fdfdfd000000000000080000008400ec698400"
+    },
+    {
+      "elapsed_ns": 36888000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 46938000000,
+      "hex": "0101fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 46968000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 47050000000,
+      "hex": "0101fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 47058000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 47120000000,
+      "hex": "0101fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 47651000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 52188000000,
+      "hex": "0100fdfdfd000000000000100000008400ec698400"
+    },
+    {
+      "elapsed_ns": 52362000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 53020000000,
+      "hex": "0100fdfdfd000000000000100000008400ec698400"
+    },
+    {
+      "elapsed_ns": 53201000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 54071000000,
+      "hex": "0100fdfdfd000000000000100000008400ec698400"
+    },
+    {
+      "elapsed_ns": 54243000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 68290000000,
+      "hex": "0100fdfdfd000000000000200000008400ec698400"
+    },
+    {
+      "elapsed_ns": 68471000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 69266000000,
+      "hex": "0100fdfdfd000000000000200000008400ec698400"
+    },
+    {
+      "elapsed_ns": 69446000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    },
+    {
+      "elapsed_ns": 70152000000,
+      "hex": "0100fdfdfd000000000000200000008400ec698400"
+    },
+    {
+      "elapsed_ns": 70293000000,
+      "hex": "0100fdfdfd000000000000000000008400ec698400"
+    }
+  ]
+}

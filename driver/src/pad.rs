@@ -148,11 +148,6 @@ fn set_bit(file: &File, request: libc::c_ulong, value: u16, what: &str) -> Resul
 /// A created uinput gamepad.
 pub struct VirtualPad {
     file: File,
-    /// Handle to the evdev node, used for the uinput FF upload handshake.
-    ///
-    /// The handshake must go through the *device* fd, because the ioctls are
-    /// implemented on the input device created by uinput, not on `/dev/uinput`.
-    event: Option<File>,
     name: String,
     last_sent: [i32; 32],
     /// Most recent rumble magnitude requested by the host, if any.
@@ -218,45 +213,10 @@ impl VirtualPad {
 
         Ok(Self {
             file,
-            event: None,
             name: name.to_string(),
             last_sent: [i32::MIN; 32],
             rumble: None,
         })
-    }
-
-    /// Open the evdev node and attach it for force-feedback handling.
-    ///
-    /// Must be called after creation and before the host is allowed to upload
-    /// effects, because the upload handshake requires the node. Returns `None`
-    /// if the node cannot be found or opened, in which case rumble will not
-    /// work but input still does.
-    pub fn attach_event_node(&mut self) -> Result<()> {
-        let path = self
-            .find_event_node()
-            .context("virtual pad event node not found in /sys/class/input")?;
-        let event = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(&path)
-            .with_context(|| format!("opening {}", path.display()))?;
-        self.event = Some(event);
-        Ok(())
-    }
-
-    fn find_event_node(&self) -> Option<std::path::PathBuf> {
-        for entry in std::fs::read_dir("/sys/class/input").ok()?.flatten() {
-            let text = entry.file_name().to_string_lossy().to_string();
-            if !text.starts_with("event") {
-                continue;
-            }
-            if let Ok(device_name) = std::fs::read_to_string(entry.path().join("device/name")) {
-                if device_name.trim() == self.name {
-                    return Some(std::path::Path::new("/dev/input").join(&text));
-                }
-            }
-        }
-        None
     }
 
     /// Read pending host control events and service the force-feedback

@@ -28,10 +28,6 @@ fn main() {
         }
     };
     std::thread::sleep(Duration::from_millis(300));
-    if let Err(e) = pad.attach_event_node() {
-        println!("attach failed: {e:#}");
-        return;
-    }
     let _ = pad.send(&vader3p_steam::input::State::default());
     std::thread::sleep(Duration::from_millis(100));
 

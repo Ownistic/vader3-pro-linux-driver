@@ -81,12 +81,25 @@ them indistinguishable; that was wrong. Re-analysis of the raw captures:
   105–107 s. No frame anywhere in the seven captures has both fields non-zero.
 
 So the D-pad is a hat in byte 9's low nibble and M1–M4 are discrete bits in
-byte 11. The per-M-key bit order below matches FlyDigi's own key table
-(M1=`0x04`, M2=`0x08`, M3=`0x10`, M4=`0x20`), but the owner could not confirm
-which physical key was pressed when, so the *assignment* is table-derived
-rather than owner-confirmed. Its consequence for the project is positive: all
-six extra buttons are independently readable in plain DInput, so Steam Input
-can receive M1–M4 as distinct buttons without any vendor-mode switch.
+byte 11. The per-M-key bit order is **owner-confirmed** by an ordered
+single-key capture: each key was pressed alone three times in turn, and each
+produced exactly one distinct bit with no overlap.
+
+| Physical key | `byte11` | Presses observed |
+| --- | --- | --- |
+| M1 | `0x04` | 3 |
+| M2 | `0x08` | 3 |
+| M3 | `0x10` | 3 |
+| M4 | `0x20` | 3 |
+
+This replaces an earlier caveat that the assignment was only table-derived
+because press order could not be confirmed. A coordinated multi-key run had
+also reported M2 where M4 was expected; that was a crossed press, not swapped
+bits, and the ordered capture settles it.
+
+Its consequence for the project is positive: all six extra buttons are
+independently readable in plain DInput, so Steam Input can receive M1–M4 as
+distinct buttons without any vendor-mode switch.
 
 Byte 9 low nibble idle value is `0` in every idle frame of every session, so it
 behaves like a clean neutral hat rather than a session-centering axis.

@@ -26,11 +26,6 @@ fn main() {
     println!("pad created");
 
     std::thread::sleep(Duration::from_millis(300));
-    if let Err(e) = pad.attach_event_node() {
-        println!("attach_event_node failed: {e:#}");
-        return;
-    }
-    println!("event node attached");
 
     // Push a neutral frame so the device is live.
     if let Err(e) = pad.send(&vader3p_steam::input::State::default()) {
