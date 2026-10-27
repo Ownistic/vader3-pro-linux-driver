@@ -112,7 +112,13 @@ impl PhysicalDevice {
         let mut info = HidrawDevinfo::default();
         // SAFETY: the fd is open for the lifetime of the call and `info` is a
         // correctly sized `hidraw_devinfo` out-parameter.
-        let rc = unsafe { libc::ioctl(std::os::unix::io::AsRawFd::as_raw_fd(&file), HIDIOCGRAWINFO, &mut info) };
+        let rc = unsafe {
+            libc::ioctl(
+                std::os::unix::io::AsRawFd::as_raw_fd(&file),
+                HIDIOCGRAWINFO,
+                &mut info,
+            )
+        };
         if rc < 0 {
             return Err(std::io::Error::last_os_error())
                 .with_context(|| format!("HIDIOCGRAWINFO on {}", path.display()));
@@ -290,9 +296,18 @@ pub fn discover_candidates() -> Vec<HidrawNode> {
         let Some(hid_id) = hid_id else { continue };
 
         let mut parts = hid_id.split(':');
-        let bus = parts.next().and_then(|s| u32::from_str_radix(s, 16).ok()).unwrap_or(0);
-        let vid = parts.next().and_then(|s| u32::from_str_radix(s, 16).ok()).unwrap_or(0) as u16;
-        let pid = parts.next().and_then(|s| u32::from_str_radix(s, 16).ok()).unwrap_or(0) as u16;
+        let bus = parts
+            .next()
+            .and_then(|s| u32::from_str_radix(s, 16).ok())
+            .unwrap_or(0);
+        let vid = parts
+            .next()
+            .and_then(|s| u32::from_str_radix(s, 16).ok())
+            .unwrap_or(0) as u16;
+        let pid = parts
+            .next()
+            .and_then(|s| u32::from_str_radix(s, 16).ok())
+            .unwrap_or(0) as u16;
 
         let id_match = (vid == VENDOR_ID && pid == PRODUCT_ID) || ALT_VENDOR_IDS.contains(&vid);
         let name_match = name
@@ -565,7 +580,11 @@ mod tests {
     fn newest_state_returns_the_last_report_not_the_first() {
         // Three queued reports; the pad must show the third, which is the most
         // recent physical position.
-        let reports = vec![report_with_left_x(0x10), report_with_left_x(0x20), report_with_left_x(0x30)];
+        let reports = vec![
+            report_with_left_x(0x10),
+            report_with_left_x(0x20),
+            report_with_left_x(0x30),
+        ];
         let state = newest_state(&reports).expect("a parseable state");
         assert_eq!(state.left_x, 0x30, "must take the newest, not the oldest");
     }
@@ -601,7 +620,9 @@ mod tests {
     #[test]
     fn descriptor_digest_is_a_full_sha256() {
         assert_eq!(DINPUT_DESCRIPTOR_SHA256.len(), 64);
-        assert!(DINPUT_DESCRIPTOR_SHA256.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(DINPUT_DESCRIPTOR_SHA256
+            .chars()
+            .all(|c| c.is_ascii_hexdigit()));
     }
 
     #[test]
@@ -639,7 +660,9 @@ mod tests {
         // component. This is the shape actually observed for a Flydigi dongle,
         // which reported bus 5 with a Cypress vendor id.
         assert_eq!(
-            interface_from_path(Path::new("/sys/devices/virtual/misc/uhid/0005:04B4:2412.002F")),
+            interface_from_path(Path::new(
+                "/sys/devices/virtual/misc/uhid/0005:04B4:2412.002F"
+            )),
             None
         );
     }

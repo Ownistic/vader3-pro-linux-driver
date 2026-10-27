@@ -24,7 +24,9 @@ fn load() -> Vec<Vec<u8>> {
             continue;
         };
         let rest = &line[pos + 5..];
-        let Some(start) = rest.find('"') else { continue };
+        let Some(start) = rest.find('"') else {
+            continue;
+        };
         let rest = &rest[start + 1..];
         let Some(end) = rest.find('"') else { continue };
         let hex = &rest[..end];

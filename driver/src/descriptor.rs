@@ -54,67 +54,121 @@ pub const BUTTONS: usize = 21;
 /// three groups. Group 3 declares 5 bits to land exactly on 21 rather than
 /// padding to 24, which keeps the payload at 8 bytes.
 pub const DESCRIPTOR: &[u8] = &[
-    0x05, 0x01, // Usage Page (Generic Desktop)
-    0x09, 0x05, // Usage (Game Pad)
-    0xA1, 0x01, // Collection (Application)
+    0x05,
+    0x01, // Usage Page (Generic Desktop)
+    0x09,
+    0x05, // Usage (Game Pad)
+    0xA1,
+    0x01, // Collection (Application)
     // --- Report ID 1: input ---
-    0x85, INPUT_REPORT_ID, //   Report ID (1)
-    0x09, 0x30, //   Usage (X)
-    0x09, 0x31, //   Usage (Y)
-    0x09, 0x32, //   Usage (Z)
-    0x09, 0x35, //   Usage (Rz)
-    0x15, 0x00, //   Logical Minimum (0)
-    0x26, 0xFF, 0x00, //   Logical Maximum (255)
-    0x75, 0x08, //   Report Size (8)
-    0x95, 0x04, //   Report Count (4)
-    0x81, 0x02, //   Input (Data, Var, Abs)
+    0x85,
+    INPUT_REPORT_ID, //   Report ID (1)
+    0x09,
+    0x30, //   Usage (X)
+    0x09,
+    0x31, //   Usage (Y)
+    0x09,
+    0x32, //   Usage (Z)
+    0x09,
+    0x35, //   Usage (Rz)
+    0x15,
+    0x00, //   Logical Minimum (0)
+    0x26,
+    0xFF,
+    0x00, //   Logical Maximum (255)
+    0x75,
+    0x08, //   Report Size (8)
+    0x95,
+    0x04, //   Report Count (4)
+    0x81,
+    0x02, //   Input (Data, Var, Abs)
     // Hat switch: 4 bits of data, padded to a byte.
-    0x09, 0x39, //   Usage (Hat switch)
-    0x15, 0x00, //   Logical Minimum (0)
-    0x25, 0x07, //   Logical Maximum (7)
-    0x35, 0x00, //   Physical Minimum (0)
-    0x46, 0x3B, 0x01, //   Physical Maximum (315)
-    0x65, 0x14, //   Unit (Eng Rot: Degrees)
-    0x75, 0x04, //   Report Size (4)
-    0x95, 0x01, //   Report Count (1)
-    0x81, 0x42, //   Input (Data, Var, Abs, Null State)
-    0x65, 0x00, //   Unit (None)
-    0x75, 0x04, //   Report Size (4)
-    0x95, 0x01, //   Report Count (1)
-    0x81, 0x03, //   Input (Const, Var, Abs)  -- padding
+    0x09,
+    0x39, //   Usage (Hat switch)
+    0x15,
+    0x00, //   Logical Minimum (0)
+    0x25,
+    0x07, //   Logical Maximum (7)
+    0x35,
+    0x00, //   Physical Minimum (0)
+    0x46,
+    0x3B,
+    0x01, //   Physical Maximum (315)
+    0x65,
+    0x14, //   Unit (Eng Rot: Degrees)
+    0x75,
+    0x04, //   Report Size (4)
+    0x95,
+    0x01, //   Report Count (1)
+    0x81,
+    0x42, //   Input (Data, Var, Abs, Null State)
+    0x65,
+    0x00, //   Unit (None)
+    0x75,
+    0x04, //   Report Size (4)
+    0x95,
+    0x01, //   Report Count (1)
+    0x81,
+    0x03, //   Input (Const, Var, Abs)  -- padding
     // Buttons 1-8.
-    0x05, 0x09, //   Usage Page (Button)
-    0x19, 0x01, //   Usage Minimum (1)
-    0x29, 0x08, //   Usage Maximum (8)
-    0x15, 0x00, //   Logical Minimum (0)
-    0x25, 0x01, //   Logical Maximum (1)
-    0x75, 0x01, //   Report Size (1)
-    0x95, 0x08, //   Report Count (8)
-    0x81, 0x02, //   Input (Data, Var, Abs)
+    0x05,
+    0x09, //   Usage Page (Button)
+    0x19,
+    0x01, //   Usage Minimum (1)
+    0x29,
+    0x08, //   Usage Maximum (8)
+    0x15,
+    0x00, //   Logical Minimum (0)
+    0x25,
+    0x01, //   Logical Maximum (1)
+    0x75,
+    0x01, //   Report Size (1)
+    0x95,
+    0x08, //   Report Count (8)
+    0x81,
+    0x02, //   Input (Data, Var, Abs)
     // Buttons 9-16.
-    0x19, 0x09, //   Usage Minimum (9)
-    0x29, 0x10, //   Usage Maximum (16)
-    0x95, 0x08, //   Report Count (8)
-    0x81, 0x02, //   Input (Data, Var, Abs)
+    0x19,
+    0x09, //   Usage Minimum (9)
+    0x29,
+    0x10, //   Usage Maximum (16)
+    0x95,
+    0x08, //   Report Count (8)
+    0x81,
+    0x02, //   Input (Data, Var, Abs)
     // Buttons 17-21: the final five of the 21 button slots.
     // Standard buttons occupy slots 1-15; the six extras occupy 16-21. Slot 16
     // falls in the high bit of byte 7, so the encoder must pack extras bit 0
     // into overall bit 15 rather than starting a fresh byte at 16.
-    0x19, 0x11, //   Usage Minimum (17)
-    0x29, 0x15, //   Usage Maximum (21)
-    0x95, 0x05, //   Report Count (5)
-    0x81, 0x02, //   Input (Data, Var, Abs)
+    0x19,
+    0x11, //   Usage Minimum (17)
+    0x29,
+    0x15, //   Usage Maximum (21)
+    0x95,
+    0x05, //   Report Count (5)
+    0x81,
+    0x02, //   Input (Data, Var, Abs)
     // Pad the button block to a whole byte.
-    0x95, 0x03, //   Report Count (3)
-    0x81, 0x03, //   Input (Const, Var, Abs)
+    0x95,
+    0x03, //   Report Count (3)
+    0x81,
+    0x03, //   Input (Const, Var, Abs)
     // --- Report ID 2: rumble output ---
-    0x85, OUTPUT_REPORT_ID, //   Report ID (2)
-    0x09, 0x01, //   Usage (Vendor Usage 1)
-    0x15, 0x00, //   Logical Minimum (0)
-    0x26, 0xFF, 0x00, //   Logical Maximum (255)
-    0x75, 0x08, //   Report Size (8)
-    0x95, 0x02, //   Report Count (2)
-    0x91, 0x02, //   Output (Data, Var, Abs)
+    0x85,
+    OUTPUT_REPORT_ID, //   Report ID (2)
+    0x09,
+    0x01, //   Usage (Vendor Usage 1)
+    0x15,
+    0x00, //   Logical Minimum (0)
+    0x26,
+    0xFF,
+    0x00, //   Logical Maximum (255)
+    0x75,
+    0x08, //   Report Size (8)
+    0x95,
+    0x02, //   Report Count (2)
+    0x91,
+    0x02, //   Output (Data, Var, Abs)
     0xC0, // End Collection
 ];
 
@@ -171,9 +225,7 @@ mod tests {
     #[test]
     fn descriptor_declares_21_buttons() {
         // Button page usages must reach 21 so the extras are addressable.
-        let has_21 = DESCRIPTOR
-            .windows(2)
-            .any(|w| w[0] == 0x29 && w[1] == 0x15);
+        let has_21 = DESCRIPTOR.windows(2).any(|w| w[0] == 0x29 && w[1] == 0x15);
         assert!(has_21, "descriptor must declare button usage up to 21");
     }
 

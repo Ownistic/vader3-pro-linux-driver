@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (build, test, lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: driver
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: driver
+
+      # Proves the crate compiles with no warnings, so the release build does not
+      # depend on a lax local setup.
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      # Scoped to shipped code. The diagnostic probes under examples/ resolve SDL
+      # symbols through dlopen and therefore use transmute deliberately; see
+      # driver/examples/.clippy-note.md.
+      - name: Clippy
+        run: cargo clippy --locked --lib --bins --tests -- -D warnings
+
+      - name: Format
+        run: cargo fmt --check
+
+  python:
+    name: Python (offline diagnostics)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      # These run against recorded fixtures and need no controller, so they are
+      # safe and meaningful in CI.
+      - name: Tests
+        run: python -m pytest tests/ -q
+
+      - name: Inventory tool help
+        run: python tools/inventory.py --help

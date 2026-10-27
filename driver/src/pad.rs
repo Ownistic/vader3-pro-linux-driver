@@ -24,7 +24,7 @@ use std::os::unix::io::AsRawFd;
 use anyhow::{Context, Result};
 
 use crate::ff::{self, FfEffect, UinputFfErase, UinputFfUpload};
-use crate::ff::{FF_GAIN, FF_RUMBLE, EV_UINPUT, UI_FF_ERASE, UI_FF_UPLOAD};
+use crate::ff::{EV_UINPUT, FF_GAIN, FF_RUMBLE, UI_FF_ERASE, UI_FF_UPLOAD};
 use crate::input::{button, extra, State};
 
 const UINPUT_MAX_NAME_SIZE: usize = 80;
@@ -230,7 +230,14 @@ impl VirtualPad {
             set_bit(&file, ioctl::SET_KEYBIT, code, "UI_SET_KEYBIT")?;
         }
         for code in [
-            abs::X, abs::Y, abs::Z, abs::RX, abs::RY, abs::RZ, abs::HAT0X, abs::HAT0Y,
+            abs::X,
+            abs::Y,
+            abs::Z,
+            abs::RX,
+            abs::RY,
+            abs::RZ,
+            abs::HAT0X,
+            abs::HAT0Y,
         ] {
             set_bit(&file, ioctl::SET_ABSBIT, code, "UI_SET_ABSBIT")?;
         }
@@ -238,15 +245,71 @@ impl VirtualPad {
         // keeps a 0..0 range and no motion is visible to any client, which a
         // probe caught only because it checked that an axis actually moved.
         for (code, info) in [
-            (abs::X, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
-            (abs::Y, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
-            (abs::Z, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
-            (abs::RX, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
-            (abs::RY, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
-            (abs::RZ, InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() }),
+            (
+                abs::X,
+                InputAbsInfo {
+                    minimum: 0,
+                    maximum: 255,
+                    ..Default::default()
+                },
+            ),
+            (
+                abs::Y,
+                InputAbsInfo {
+                    minimum: 0,
+                    maximum: 255,
+                    ..Default::default()
+                },
+            ),
+            (
+                abs::Z,
+                InputAbsInfo {
+                    minimum: 0,
+                    maximum: 255,
+                    ..Default::default()
+                },
+            ),
+            (
+                abs::RX,
+                InputAbsInfo {
+                    minimum: 0,
+                    maximum: 255,
+                    ..Default::default()
+                },
+            ),
+            (
+                abs::RY,
+                InputAbsInfo {
+                    minimum: 0,
+                    maximum: 255,
+                    ..Default::default()
+                },
+            ),
+            (
+                abs::RZ,
+                InputAbsInfo {
+                    minimum: 0,
+                    maximum: 255,
+                    ..Default::default()
+                },
+            ),
             // Hats are signed: -1 left/up, +1 right/down.
-            (abs::HAT0X, InputAbsInfo { minimum: -1, maximum: 1, ..Default::default() }),
-            (abs::HAT0Y, InputAbsInfo { minimum: -1, maximum: 1, ..Default::default() }),
+            (
+                abs::HAT0X,
+                InputAbsInfo {
+                    minimum: -1,
+                    maximum: 1,
+                    ..Default::default()
+                },
+            ),
+            (
+                abs::HAT0Y,
+                InputAbsInfo {
+                    minimum: -1,
+                    maximum: 1,
+                    ..Default::default()
+                },
+            ),
         ] {
             let setup = UinputAbsSetup {
                 code,
@@ -498,8 +561,18 @@ impl VirtualPad {
         self.emit_changed(22, ev_type::ABS, abs::HAT0X, hat_x)?;
         self.emit_changed(23, ev_type::ABS, abs::HAT0Y, hat_y)?;
 
-        self.emit_changed(24, ev_type::ABS, abs::X, i32::from(crate::encode::centre_axis(state.left_x)))?;
-        self.emit_changed(25, ev_type::ABS, abs::Y, i32::from(crate::encode::centre_axis(state.left_y)))?;
+        self.emit_changed(
+            24,
+            ev_type::ABS,
+            abs::X,
+            i32::from(crate::encode::centre_axis(state.left_x)),
+        )?;
+        self.emit_changed(
+            25,
+            ev_type::ABS,
+            abs::Y,
+            i32::from(crate::encode::centre_axis(state.left_y)),
+        )?;
         // SDL assigns joystick axis slots by the *numeric order of the kernel
         // ABS codes present*, not by their names:
         //   a0=ABS_X  a1=ABS_Y  a2=ABS_Z  a3=ABS_RX  a4=ABS_RY  a5=ABS_RZ
@@ -555,11 +628,19 @@ mod tests {
 
     #[test]
     fn button_codes_are_unique_and_ordered() {
-        let mut all: Vec<u16> = BUTTON_CODES.iter().chain(EXTRA_CODES.iter()).copied().collect();
+        let mut all: Vec<u16> = BUTTON_CODES
+            .iter()
+            .chain(EXTRA_CODES.iter())
+            .copied()
+            .collect();
         let len = all.len();
         all.sort_unstable();
         all.dedup();
-        assert_eq!(all.len(), len, "duplicate button codes would alias controls");
+        assert_eq!(
+            all.len(),
+            len,
+            "duplicate button codes would alias controls"
+        );
     }
 
     #[test]
@@ -636,7 +717,10 @@ mod tests {
         let codes: Vec<u16> = AXIS_ASSIGNMENT.iter().map(|(_, c)| *c).collect();
         let mut sorted = codes.clone();
         sorted.sort_unstable();
-        assert_eq!(codes, sorted, "AXIS_ASSIGNMENT must be in ascending code order");
+        assert_eq!(
+            codes, sorted,
+            "AXIS_ASSIGNMENT must be in ascending code order"
+        );
     }
 
     #[test]
@@ -654,9 +738,17 @@ mod tests {
         // no motion is visible to any client. Every axis must therefore be
         // given an explicit non-degenerate range by the create path; this test
         // documents the ranges that must be supplied.
-        let stick = InputAbsInfo { minimum: 0, maximum: 255, ..Default::default() };
+        let stick = InputAbsInfo {
+            minimum: 0,
+            maximum: 255,
+            ..Default::default()
+        };
         assert!(stick.maximum > stick.minimum, "sticks need a real range");
-        let hat = InputAbsInfo { minimum: -1, maximum: 1, ..Default::default() };
+        let hat = InputAbsInfo {
+            minimum: -1,
+            maximum: 1,
+            ..Default::default()
+        };
         assert_eq!(hat.minimum, -1);
         assert_eq!(hat.maximum, 1);
     }
@@ -666,7 +758,14 @@ mod tests {
         // Four stick axes, two triggers, two hat axes. A missing hat would make
         // the D-pad invisible to SDL; an extra axis would shift the map.
         let declared = [
-            abs::X, abs::Y, abs::Z, abs::RX, abs::RY, abs::RZ, abs::HAT0X, abs::HAT0Y,
+            abs::X,
+            abs::Y,
+            abs::Z,
+            abs::RX,
+            abs::RY,
+            abs::RZ,
+            abs::HAT0X,
+            abs::HAT0Y,
         ];
         let mut sorted: Vec<u16> = declared.to_vec();
         sorted.sort_unstable();

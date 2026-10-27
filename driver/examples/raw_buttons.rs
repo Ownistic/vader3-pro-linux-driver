@@ -55,10 +55,8 @@ fn main() {
             std::mem::transmute(sym("SDL_JoystickNameForIndex"));
         let joy_open: SdlJoystickOpen = std::mem::transmute(sym("SDL_JoystickOpen"));
         let joy_close: SdlJoystickClose = std::mem::transmute(sym("SDL_JoystickClose"));
-        let joy_nbtn: SdlJoystickNumButtons =
-            std::mem::transmute(sym("SDL_JoystickNumButtons"));
-        let get_button: SdlJoystickGetButton =
-            std::mem::transmute(sym("SDL_JoystickGetButton"));
+        let joy_nbtn: SdlJoystickNumButtons = std::mem::transmute(sym("SDL_JoystickNumButtons"));
+        let get_button: SdlJoystickGetButton = std::mem::transmute(sym("SDL_JoystickGetButton"));
         let get_guid: SdlJoystickGetDeviceGUID =
             std::mem::transmute(sym("SDL_JoystickGetDeviceGUID"));
 
@@ -89,7 +87,10 @@ fn main() {
         let guid = get_guid(index);
         println!(
             "GUID: {}",
-            guid.data.iter().map(|b| format!("{b:02x}")).collect::<String>()
+            guid.data
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
         );
 
         let joy = joy_open(index);

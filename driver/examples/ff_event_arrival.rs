@@ -42,7 +42,11 @@ fn main() {
     println!("node: {}", path.display());
 
     // Client fd: issues the upload, exactly as Steam would.
-    let client = match std::fs::OpenOptions::new().read(true).write(true).open(&path) {
+    let client = match std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+    {
         Ok(f) => f,
         Err(e) => {
             println!("opening client fd: {e}");

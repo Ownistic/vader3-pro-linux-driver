@@ -22,7 +22,9 @@ fn report_hexes(text: &str) -> Vec<String> {
             continue;
         };
         let rest = &line[pos + 5..];
-        let Some(start) = rest.find('"') else { continue };
+        let Some(start) = rest.find('"') else {
+            continue;
+        };
         let rest = &rest[start + 1..];
         let Some(end) = rest.find('"') else { continue };
         out.push(rest[..end].to_string());
@@ -54,8 +56,8 @@ fn fixture_reports_are_all_parseable() {
 
     for (idx, raw) in reports.iter().enumerate() {
         assert_eq!(raw.len(), REPORT_LEN, "report {idx} length");
-        let state = input::parse(raw)
-            .unwrap_or_else(|e| panic!("report {idx} failed to parse: {e}"));
+        let state =
+            input::parse(raw).unwrap_or_else(|e| panic!("report {idx} failed to parse: {e}"));
         // A parse must produce a state whose bits fit the declared button count.
         assert!(state.buttons < (1 << button::STANDARD_COUNT));
         assert!(state.extras < (1 << extra::COUNT));
@@ -78,8 +80,14 @@ fn fixture_shows_a_b_press_and_release() {
         .filter(|w| w[0].button(button::B) != w[1].button(button::B))
         .count();
 
-    assert!(a_edges >= 2, "A should both press and release, got {a_edges} edges");
-    assert!(b_edges >= 2, "B should both press and release, got {b_edges} edges");
+    assert!(
+        a_edges >= 2,
+        "A should both press and release, got {a_edges} edges"
+    );
+    assert!(
+        b_edges >= 2,
+        "B should both press and release, got {b_edges} edges"
+    );
 }
 
 #[test]

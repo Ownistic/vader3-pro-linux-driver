@@ -1,10 +1,33 @@
 # Progress
 
-## Current increment
+## Current state (pre-release)
 
-Phase 00: **complete**, independently verified/converged. Initial requirements
-saved in `PRD.md` before other project files. Scope/checks/results:
-`docs/phases/00-setup.md`. Phase 01 remains incomplete.
+The project now has a **working userspace driver**, not only research. Summary;
+details and evidence follow below.
+
+| Requirement area | State |
+| --- | --- |
+| Read physical Bluetooth DInput reports | Working, verified on hardware |
+| All 21 buttons incl. M1-M4, C, Z as independent inputs | Working; proven in firmware and by measurement |
+| Virtual pad exposes 21 buttons + 6 axes + `FF_RUMBLE` | Working, verified via kernel bitmaps and SDL |
+| Rumble (Bluetooth) | **Solved** — 4-byte NUS frame; verified by sustained vibration |
+| Rumble (USB DInput) | Verified on hardware (`mi_02`, `0xFFA0`) |
+| Duplicate physical controller suppressed | Working (`EVIOCGRAB`, crash-safe) |
+| Input latency through translator | Measured **0.03 ms** median |
+| Steam recognition of the six extras | **Untested** — needs the mapping file and a Steam run |
+| Native gyro | **Not implemented** — absent from the Bluetooth DInput stream |
+
+Phases 02 (input prototype) and 05 (rumble) are effectively **complete**. Phase 03
+(Steam integration) is implemented but its Steam-side acceptance check has not
+been run, so it stays open. Phase 04 (motion) is not started and is blocked by a
+protocol limitation rather than by effort. Phase 00 was independently
+verified/converged; its record is `docs/phases/00-setup.md`.
+
+Everything recorded below this section is the historical evidence trail from
+research, retained because it is the basis for the corrections made later. Where
+an earlier note contradicts the table above, the table and the newer evidence
+documents supersede it — in particular, the early statement that Bluetooth rumble
+was "unresolved" is obsolete.
 
 ## Baseline
 

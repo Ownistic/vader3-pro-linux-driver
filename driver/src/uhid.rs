@@ -290,7 +290,10 @@ mod tests {
 
     #[test]
     fn decode_rumble_reads_numbered_report() {
-        assert_eq!(decode_rumble(&[RUMBLE_REPORT_ID, 0x40, 0x80]), Some((0x40, 0x80)));
+        assert_eq!(
+            decode_rumble(&[RUMBLE_REPORT_ID, 0x40, 0x80]),
+            Some((0x40, 0x80))
+        );
     }
 
     #[test]

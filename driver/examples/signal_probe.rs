@@ -142,7 +142,9 @@ fn main() {
     let baseline_state = State::default();
     pad.send(&baseline_state).unwrap();
     std::thread::sleep(Duration::from_millis(120));
-    let base_axes: Vec<i16> = (0..naxes).map(|a| unsafe { (sdl.get_axis)(joy, a) }).collect();
+    let base_axes: Vec<i16> = (0..naxes)
+        .map(|a| unsafe { (sdl.get_axis)(joy, a) })
+        .collect();
     let base_buttons: Vec<u8> = (0..nbuttons)
         .map(|b| unsafe { (sdl.get_button)(joy, b) })
         .collect();
@@ -188,8 +190,21 @@ fn main() {
     let button_inputs: Vec<(String, Box<dyn Fn(&mut State)>)> = {
         let mut v: Vec<(String, Box<dyn Fn(&mut State)>)> = Vec::new();
         let std_names = [
-            "A", "B", "X", "Y", "LB", "RB", "Select", "Start", "L3", "R3", "Home",
-            "DPAD_UP", "DPAD_RIGHT", "DPAD_DOWN", "DPAD_LEFT",
+            "A",
+            "B",
+            "X",
+            "Y",
+            "LB",
+            "RB",
+            "Select",
+            "Start",
+            "L3",
+            "R3",
+            "Home",
+            "DPAD_UP",
+            "DPAD_RIGHT",
+            "DPAD_DOWN",
+            "DPAD_LEFT",
         ];
         let std_indices = [
             button::A,
@@ -269,14 +284,27 @@ fn main() {
             .and_then(|(_, v)| v.first().copied())
     };
     let std_map = [
-        ("a", "A"), ("b", "B"), ("x", "X"), ("y", "Y"),
-        ("leftshoulder", "LB"), ("rightshoulder", "RB"),
-        ("back", "Select"), ("start", "Start"),
-        ("leftstick", "L3"), ("rightstick", "R3"), ("guide", "Home"),
-        ("dpup", "DPAD_UP"), ("dpright", "DPAD_RIGHT"),
-        ("dpdown", "DPAD_DOWN"), ("dpleft", "DPAD_LEFT"),
-        ("misc1", "C"), ("touchpad", "Z"),
-        ("paddle1", "M1"), ("paddle2", "M2"), ("paddle3", "M3"), ("paddle4", "M4"),
+        ("a", "A"),
+        ("b", "B"),
+        ("x", "X"),
+        ("y", "Y"),
+        ("leftshoulder", "LB"),
+        ("rightshoulder", "RB"),
+        ("back", "Select"),
+        ("start", "Start"),
+        ("leftstick", "L3"),
+        ("rightstick", "R3"),
+        ("guide", "Home"),
+        ("dpup", "DPAD_UP"),
+        ("dpright", "DPAD_RIGHT"),
+        ("dpdown", "DPAD_DOWN"),
+        ("dpleft", "DPAD_LEFT"),
+        ("misc1", "C"),
+        ("touchpad", "Z"),
+        ("paddle1", "M1"),
+        ("paddle2", "M2"),
+        ("paddle3", "M3"),
+        ("paddle4", "M4"),
     ];
     let mut parts = Vec::new();
     for (sdl_name, crate_name) in std_map {

@@ -206,7 +206,10 @@ impl Translator {
         if cfg.suppress_physical {
             let nodes = suppress::evdev_nodes_for(&sysfs);
             if nodes.is_empty() {
-                log_warn!(log, "no evdev nodes found for the controller; not suppressing");
+                log_warn!(
+                    log,
+                    "no evdev nodes found for the controller; not suppressing"
+                );
             }
             for node in nodes {
                 match suppress::ExclusiveGrab::acquire(&node) {
@@ -425,8 +428,12 @@ pub fn describe(state: &State) -> String {
     }
     let sticks = format!(
         "lx={:#04x} ly={:#04x} rx={:#04x} ry={:#04x} lt={:#04x} rt={:#04x}",
-        state.left_x, state.left_y, state.right_x, state.right_y,
-        state.left_trigger, state.right_trigger
+        state.left_x,
+        state.left_y,
+        state.right_x,
+        state.right_y,
+        state.left_trigger,
+        state.right_trigger
     );
     if parts.is_empty() {
         format!("none | {sticks}")

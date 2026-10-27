@@ -14,7 +14,7 @@ use crate::input::{button, extra, State, BUTTON_COUNT};
 /// The device reports sticks as **signed 8-bit** values, not as offsets from a
 /// fixed centre, and not as absolute positions. The captured extremes pin this
 /// down: a full-left hold reads `0x80` and a full-right hold reads `0x7f`,
-/// which are only consistent as `-128` and `+127`. 
+/// which are only consistent as `-128` and `+127`.
 ///
 /// An earlier version of this function subtracted `0xfd` (an observed idle
 /// value) instead. That was wrong: it placed `0x7f` to the *left* of `0x80`,
@@ -149,8 +149,14 @@ mod tests {
         // Idle values seen in captured frames: 0xfd and 0x01.
         let a = centre_axis(0xfd);
         let b = centre_axis(0x01);
-        assert!((120..=136).contains(&a), "0xfd idle should be near centre, got {a}");
-        assert!((120..=136).contains(&b), "0x01 idle should be near centre, got {b}");
+        assert!(
+            (120..=136).contains(&a),
+            "0xfd idle should be near centre, got {a}"
+        );
+        assert!(
+            (120..=136).contains(&b),
+            "0x01 idle should be near centre, got {b}"
+        );
     }
 
     #[test]
@@ -227,7 +233,11 @@ mod tests {
         };
         let b = pack_buttons(&state);
         assert_eq!(b[1] & 0x80, 0x80, "C must occupy bit 7 of byte 7");
-        assert_eq!(b[2] & 0x1f, 0x1f, "Z..M4 must fill the low five bits of byte 8");
+        assert_eq!(
+            b[2] & 0x1f,
+            0x1f,
+            "Z..M4 must fill the low five bits of byte 8"
+        );
     }
 
     #[test]

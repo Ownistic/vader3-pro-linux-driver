@@ -102,10 +102,7 @@ fn find_event_node(name: &str) -> Option<(std::path::PathBuf, std::path::PathBuf
         let name_path = entry.path().join("device/name");
         if let Ok(device_name) = std::fs::read_to_string(name_path) {
             if device_name.trim() == name {
-                return Some((
-                    std::path::Path::new("/dev/input").join(&text),
-                    entry.path(),
-                ));
+                return Some((std::path::Path::new("/dev/input").join(&text), entry.path()));
             }
         }
     }

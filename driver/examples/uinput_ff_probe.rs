@@ -114,7 +114,9 @@ fn main() {
     }
 
     // Four absolute axes plus a hat.
-    for abs in [ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ, ABS_HAT0X, ABS_HAT0Y] {
+    for abs in [
+        ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ, ABS_HAT0X, ABS_HAT0Y,
+    ] {
         let _ = ioctl_int(&file, UI_SET_ABSBIT, abs.into());
     }
 

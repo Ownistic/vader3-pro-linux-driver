@@ -73,8 +73,21 @@ pub mod extra {
 
 /// Names in canonical order, for logging and test messages.
 pub const STANDARD_NAMES: [&str; button::STANDARD_COUNT] = [
-    "a", "b", "x", "y", "lb", "rb", "select", "start", "l3", "r3", "home", "dpad_up",
-    "dpad_right", "dpad_down", "dpad_left",
+    "a",
+    "b",
+    "x",
+    "y",
+    "lb",
+    "rb",
+    "select",
+    "start",
+    "l3",
+    "r3",
+    "home",
+    "dpad_up",
+    "dpad_right",
+    "dpad_down",
+    "dpad_left",
 ];
 
 /// Names in canonical order for the six independent extras.
@@ -281,13 +294,16 @@ mod tests {
         // Bytes 15-20 are uninitialised padding; junk there must not matter.
         let mut r = neutral();
         r[15..].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef, 0x00, 0xff]);
-        assert_eq!(parse(&r).unwrap(), State {
-            left_x: 0xfd,
-            left_y: 0xfd,
-            right_x: 0xfd,
-            right_y: 0xfd,
-            ..State::default()
-        });
+        assert_eq!(
+            parse(&r).unwrap(),
+            State {
+                left_x: 0xfd,
+                left_y: 0xfd,
+                right_x: 0xfd,
+                right_y: 0xfd,
+                ..State::default()
+            }
+        );
     }
 
     #[test]
@@ -330,7 +346,11 @@ mod tests {
             let mut r = neutral();
             r[9] = nibble;
             let s = parse(&r).unwrap();
-            assert_eq!(s.buttons & 0xf800, 0, "hat {nibble} must not press a direction");
+            assert_eq!(
+                s.buttons & 0xf800,
+                0,
+                "hat {nibble} must not press a direction"
+            );
         }
     }
 
@@ -401,10 +421,11 @@ mod tests {
         r[11] = 0x3f;
         let s = parse(&r).unwrap();
         assert_eq!(
-            s.buttons & ((1 << button::DPAD_UP)
-                | (1 << button::DPAD_RIGHT)
-                | (1 << button::DPAD_DOWN)
-                | (1 << button::DPAD_LEFT)),
+            s.buttons
+                & ((1 << button::DPAD_UP)
+                    | (1 << button::DPAD_RIGHT)
+                    | (1 << button::DPAD_DOWN)
+                    | (1 << button::DPAD_LEFT)),
             0
         );
     }

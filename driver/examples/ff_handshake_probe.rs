@@ -11,7 +11,7 @@
 use std::os::unix::io::AsRawFd;
 use std::time::Duration;
 
-use vader3p_steam::ff::{FF_RUMBLE, FF_EFFECT_SIZE};
+use vader3p_steam::ff::{FF_EFFECT_SIZE, FF_RUMBLE};
 use vader3p_steam::pad::VirtualPad;
 
 fn main() {
@@ -44,7 +44,11 @@ fn main() {
     };
     println!("event node: {}", path.display());
 
-    let node = match std::fs::OpenOptions::new().read(true).write(true).open(&path) {
+    let node = match std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+    {
         Ok(f) => f,
         Err(e) => {
             println!("opening node: {e}");
@@ -55,9 +59,7 @@ fn main() {
 
     // SAFETY: EVIOCGEFFECTS writes one int.
     let rc = unsafe { libc::ioctl(node.as_raw_fd(), 0x8004_4584, &mut effects) };
-    println!(
-        "EVIOCGEFFECTS: rc={rc} capacity={effects}"
-    );
+    println!("EVIOCGEFFECTS: rc={rc} capacity={effects}");
 
     // Upload a rumble effect exactly as a client would. The kernel will raise
     // EV_UINPUT/UI_FF_UPLOAD, which our poll_host must answer or this blocks.

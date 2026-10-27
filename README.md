@@ -485,15 +485,33 @@ Related work that informed this project: SDL's `SDL_hidapi_flydigi.c`,
 `ahungry/vader3`, and the Linux `xpad`/`hid-playstation` drivers. This project
 shares no code with them.
 
-Not affiliated with FlyDigi or Valve.
+Not affiliated with FlyDigi or Valve. "Flydigi", "Vader" and "Steam" are the
+property of their respective owners and are used here only to describe what this
+software interoperates with.
 
 ---
 
 ## License
 
-`MIT OR Apache-2.0`, matching the declaration in `driver/Cargo.toml`.
+Dual-licensed under either of
 
-> **Note for the maintainer:** this is the standard Rust ecosystem dual license,
-> but it was set in the manifest before a release license was formally chosen. If
-> a different license is intended, change `driver/Cargo.toml` and add a `LICENSE`
-> file before publishing.
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. This matches `license = "MIT OR Apache-2.0"` in
+`driver/Cargo.toml` and is the usual Rust convention.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license, shall
+be dual-licensed as above, without any additional terms or conditions.
+
+### Scope
+
+The licenses above cover the source code and documentation in this repository.
+They do **not** grant any rights to FlyDigi's Space Station application or
+firmware, which are proprietary and were used only for protocol research. No code
+from those artifacts is included here; only observed byte layouts and command
+semantics are described, which is why [docs/PROTOCOL.md](docs/PROTOCOL.md)
+records evidence rather than shipping extracted material.

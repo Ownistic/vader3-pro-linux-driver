@@ -126,9 +126,7 @@ pub mod bluez {
         /// BlueZ instance.
         fn find_nus_rx(conn: &Connection, address: &str) -> Result<dbus::Path<'static>> {
             let proxy = Proxy::new("org.bluez", "/", CALL_TIMEOUT, conn);
-            let (objects,): (
-                HashMap<dbus::Path<'static>, HashMap<String, PropMap>>,
-            ) = proxy
+            let (objects,): (HashMap<dbus::Path<'static>, HashMap<String, PropMap>>,) = proxy
                 .method_call(
                     "org.freedesktop.DBus.ObjectManager",
                     "GetManagedObjects",
@@ -158,15 +156,14 @@ pub mod bluez {
 
         /// Write one rumble frame.
         pub fn write(&self, frame: &[u8]) -> Result<()> {
-            let proxy = Proxy::new(
-                "org.bluez",
-                self.path.clone(),
-                CALL_TIMEOUT,
-                &self.conn,
-            );
+            let proxy = Proxy::new("org.bluez", self.path.clone(), CALL_TIMEOUT, &self.conn);
             let options: PropMap = HashMap::new();
             proxy
-                .method_call("org.bluez.GattCharacteristic1", "WriteValue", (frame, options))
+                .method_call(
+                    "org.bluez.GattCharacteristic1",
+                    "WriteValue",
+                    (frame, options),
+                )
                 .map_err(|e: dbus::Error| anyhow::anyhow!("WriteValue failed: {e}"))
         }
     }

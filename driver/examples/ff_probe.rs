@@ -149,7 +149,6 @@ fn gamepad_without_output() -> Vec<u8> {
 
 fn main() {
     let variants = [
-        
         Variant {
             label: "baseline: vendor usage 1",
             descriptor: baseline(),

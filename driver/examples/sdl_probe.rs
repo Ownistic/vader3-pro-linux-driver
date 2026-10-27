@@ -29,8 +29,7 @@ type SdlJoystickInstanceId = unsafe extern "C" fn(*mut c_void) -> i32;
 type SdlIsGameController = unsafe extern "C" fn(c_int) -> c_int;
 type SdlGameControllerOpen = unsafe extern "C" fn(c_int) -> *mut c_void;
 type SdlGameControllerNumButtons = unsafe extern "C" fn(*mut c_void) -> c_int;
-type SdlGameControllerGetStringForButton =
-    unsafe extern "C" fn(c_int) -> *const c_char;
+type SdlGameControllerGetStringForButton = unsafe extern "C" fn(c_int) -> *const c_char;
 type SdlGameControllerNumAxes = unsafe extern "C" fn(*mut c_void) -> c_int;
 type SdlGameControllerGetStringForAxis = unsafe extern "C" fn(c_int) -> *const c_char;
 type SdlJoystickGetButton = unsafe extern "C" fn(*mut c_void, c_int) -> u8;
@@ -51,8 +50,7 @@ struct GcButtonBind {
     /// 16-bit halves of a single int.
     value: [c_int; 2],
 }
-type SdlGcGetBindForButton =
-    unsafe extern "C" fn(*mut c_void, c_int) -> GcButtonBind;
+type SdlGcGetBindForButton = unsafe extern "C" fn(*mut c_void, c_int) -> GcButtonBind;
 type SdlJoystickUpdate = unsafe extern "C" fn();
 
 fn main() {
@@ -85,38 +83,35 @@ fn main() {
             std::mem::transmute(sym("SDL_JoystickNameForIndex"));
         let joy_open: SdlJoystickOpen = std::mem::transmute(sym("SDL_JoystickOpen"));
         let joy_close: SdlJoystickClose = std::mem::transmute(sym("SDL_JoystickClose"));
-        let joy_buttons: SdlJoystickNumButtons =
-            std::mem::transmute(sym("SDL_JoystickNumButtons"));
+        let joy_buttons: SdlJoystickNumButtons = std::mem::transmute(sym("SDL_JoystickNumButtons"));
         let joy_axes: SdlJoystickNumAxes = std::mem::transmute(sym("SDL_JoystickNumAxes"));
         let joy_hats: SdlJoystickNumHats = std::mem::transmute(sym("SDL_JoystickNumHats"));
-        let joy_inst: SdlJoystickInstanceId =
-            std::mem::transmute(sym("SDL_JoystickInstanceID"));
+        let joy_inst: SdlJoystickInstanceId = std::mem::transmute(sym("SDL_JoystickInstanceID"));
         let is_gc: SdlIsGameController = std::mem::transmute(sym("SDL_IsGameController"));
         let joy_update: SdlJoystickUpdate = std::mem::transmute(sym("SDL_JoystickUpdate"));
         let joy_guid: SdlJoystickGetDeviceGuid =
             std::mem::transmute(sym("SDL_JoystickGetDeviceGUID"));
         let joy_get_button: SdlJoystickGetButton =
             std::mem::transmute(sym("SDL_JoystickGetButton"));
-        let gc_open: SdlGameControllerOpen =
-            std::mem::transmute(sym("SDL_GameControllerOpen"));
+        let gc_open: SdlGameControllerOpen = std::mem::transmute(sym("SDL_GameControllerOpen"));
         let gc_buttons: Option<SdlGameControllerNumButtons> =
-            std::mem::transmute::<*mut c_void, Option<SdlGameControllerNumButtons>>(
-                sym("SDL_GameControllerNumButtons"),
-            );
+            std::mem::transmute::<*mut c_void, Option<SdlGameControllerNumButtons>>(sym(
+                "SDL_GameControllerNumButtons",
+            ));
         let gc_bind: SdlGcGetBindForButton =
             std::mem::transmute(sym("SDL_GameControllerGetBindForButton"));
         let gc_btn_name: Option<SdlGameControllerGetStringForButton> =
-            std::mem::transmute::<*mut c_void, Option<SdlGameControllerGetStringForButton>>(
-                sym("SDL_GameControllerGetStringForButton"),
-            );
-        let gc_axes: Option<SdlGameControllerNumAxes> =
-            std::mem::transmute::<*mut c_void, Option<SdlGameControllerNumAxes>>(
-                sym("SDL_GameControllerNumAxes"),
-            );
+            std::mem::transmute::<*mut c_void, Option<SdlGameControllerGetStringForButton>>(sym(
+                "SDL_GameControllerGetStringForButton",
+            ));
+        let gc_axes: Option<SdlGameControllerNumAxes> = std::mem::transmute::<
+            *mut c_void,
+            Option<SdlGameControllerNumAxes>,
+        >(sym("SDL_GameControllerNumAxes"));
         let gc_axis_name: Option<SdlGameControllerGetStringForAxis> =
-            std::mem::transmute::<*mut c_void, Option<SdlGameControllerGetStringForAxis>>(
-                sym("SDL_GameControllerGetStringForAxis"),
-            );
+            std::mem::transmute::<*mut c_void, Option<SdlGameControllerGetStringForAxis>>(sym(
+                "SDL_GameControllerGetStringForAxis",
+            ));
 
         if init(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) != 0 {
             println!("SDL_Init failed");
@@ -148,8 +143,10 @@ fn main() {
             let joy_button_total = joy_buttons(joy);
             let joy_axis_total = joy_axes(joy);
             println!("    instance id : {}", joy_inst(joy));
-            println!("    joystick    : {joy_button_total} buttons, {joy_axis_total} axes, {} hats",
-                joy_hats(joy));
+            println!(
+                "    joystick    : {joy_button_total} buttons, {joy_axis_total} axes, {} hats",
+                joy_hats(joy)
+            );
             joy_close(joy);
 
             if is_controller {
@@ -170,10 +167,27 @@ fn main() {
                     // mapping, so it must not be used to infer coverage.
                     // SDL_CONTROLLER_BUTTON_* enum values 0..=20.
                     const BUTTON_ENUM: [&str; 21] = [
-                        "a", "b", "x", "y", "back", "guide", "start", "leftstick",
-                        "rightstick", "leftshoulder", "rightshoulder", "dpup", "dpdown",
-                        "dpleft", "dpright", "misc1", "paddle1", "paddle2", "paddle3",
-                        "paddle4", "touchpad",
+                        "a",
+                        "b",
+                        "x",
+                        "y",
+                        "back",
+                        "guide",
+                        "start",
+                        "leftstick",
+                        "rightstick",
+                        "leftshoulder",
+                        "rightshoulder",
+                        "dpup",
+                        "dpdown",
+                        "dpleft",
+                        "dpright",
+                        "misc1",
+                        "paddle1",
+                        "paddle2",
+                        "paddle3",
+                        "paddle4",
+                        "touchpad",
                     ];
                     let mut bound = Vec::new();
                     let mut unbound = Vec::new();
@@ -189,20 +203,20 @@ fn main() {
                                 let packed = bind.value[1] as u32;
                                 let min = packed as i16;
                                 let max = (packed >> 16) as i16;
-                                bound.push(format!(
-                                    "{label}=hat{}[{min}..{max}]",
-                                    bind.value[0]
-                                ));
+                                bound.push(format!("{label}=hat{}[{min}..{max}]", bind.value[0]));
                             }
                             _ => unbound.push(*label),
                         }
                     }
                     println!("    bound       : {}", bound.join(", "));
-                    println!("    UNBOUND     : {}", if unbound.is_empty() {
-                        "(none)".to_string()
-                    } else {
-                        unbound.join(", ")
-                    });
+                    println!(
+                        "    UNBOUND     : {}",
+                        if unbound.is_empty() {
+                            "(none)".to_string()
+                        } else {
+                            unbound.join(", ")
+                        }
+                    );
                     if let Some(name_of) = gc_axis_name {
                         let mut axes = Vec::new();
                         for a in 0..joy_axis_total {
@@ -210,10 +224,7 @@ fn main() {
                             if p.is_null() {
                                 axes.push(format!("a{a}=UNMAPPED"));
                             } else {
-                                axes.push(format!(
-                                    "a{a}={}",
-                                    CStr::from_ptr(p).to_string_lossy()
-                                ));
+                                axes.push(format!("a{a}={}", CStr::from_ptr(p).to_string_lossy()));
                             }
                         }
                         println!("    axis map    : {}", axes.join(", "));
