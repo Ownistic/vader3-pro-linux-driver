@@ -33,6 +33,12 @@ Two viable shapes, in increasing invasiveness.
 
 ### Option A: reach rumble from the existing Bluetooth dispatcher
 
+**Status: no longer viable as originally stated.** See
+[bluetooth-reachability.md](bluetooth-reachability.md): the Bluetooth handlers
+sit behind a radio packet interface, and a GATT write does not appear to reach
+them, so adding a branch there would add code to a path the host write never
+enters. Recorded here for completeness.
+
 Add a rumble branch to `FUN_00018828`, which is already called from the
 Bluetooth receive path (`FUN_00019a50` → `FUN_00018828`) with
 `buf = 0x008477cc`, `len = *(0x0084652a)`.
@@ -142,9 +148,12 @@ A brick is not a recoverable inconvenience here.
 
 ## Recommended order
 
-1. **Resolve the `FUN_00019fa4` reachability question.** If a GATT write can
+1. **Resolve the `FUN_00019fa4` reachability question.** ~~If a GATT write can
    reach that handler, `A5 12` rumble may already be possible and no patch is
-   needed. This is cheap, needs no flashing, and the answer changes everything.2. **Establish whether the device verifies uploaded images.** Read the installed
+   needed.~~ **Resolved:** the handlers sit behind a radio packet interface that
+   a GATT write does not appear to reach. See
+   [bluetooth-reachability.md](bluetooth-reachability.md). A patch must hook the
+   GATT write layer itself, or add an output report.2. **Establish whether the device verifies uploaded images.** Read the installed
    version, and if possible observe a legitimate OTA update. This bounds the
    whole project.
 3. **Only then** implement the minimal branch from Option A, if step 1 shows the
