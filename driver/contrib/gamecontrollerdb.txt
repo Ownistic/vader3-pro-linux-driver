@@ -42,4 +42,4 @@
 #
 # Regenerate the GUID with:
 #   cargo run --example sdl_probe   # prints GUID for the translated pad
-0300d0f86b1d00000100000000010000,Flydigi Vader 3 Pro (translated),a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,back:b6,start:b7,guide:b8,leftstick:b9,rightstick:b10,dpup:b11,dpdown:b12,dpleft:b13,dpright:b14,misc1:b15,touchpad:b16,paddle1:b17,paddle2:b18,paddle3:b19,paddle4:b20,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,platform:Linux,
+0300d0f86b1d00000100000000010000,Flydigi Vader 3 Pro (translated),a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,back:b6,start:b7,guide:b8,leftstick:b9,rightstick:b10,dpup:b11,dpdown:b12,dpleft:b13,dpright:b14,misc1:b15,touchpad:b16,paddle1:b17,paddle2:b18,paddle3:b19,paddle4:b20,leftx:a0,lefty:a1,lefttrigger:a2,rightx:a3,righty:a4,righttrigger:a5,platform:Linux,

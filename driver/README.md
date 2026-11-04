@@ -30,12 +30,12 @@ It is exercised only by the `ff_probe` and `uhid_caps` examples.
 
 **`uinput`, not `uhid`.** Measured, not assumed — see above.
 
-**Axis codes are positional, not mnemonic.** SDL assigns joystick axis slots by
-the numeric order of kernel `ABS_*` codes, and its default gamepad mapping reads
-`a2` as right-x, `a3` as right-y, `a4` as left trigger. So right-stick Y must use
-`ABS_RX` and the triggers `ABS_RY`/`ABS_RZ`. Assigning by name makes SDL read stick
-motion as trigger presses. `AXIS_ASSIGNMENT` in `pad.rs` is the single source of
-truth, with a test that the codes stay ascending.
+**Axis codes are mnemonic, not positional.** Left stick on `ABS_X`/`ABS_Y`, right
+stick on `ABS_RX`/`ABS_RY`, triggers on `ABS_Z`/`ABS_RZ` — the conventional Linux
+gamepad layout. An earlier version assigned by position instead, reasoning that a
+consumer would number axes by ascending code; on Steam that put the left trigger
+on the right stick's Y and made the right stick's X fire the left trigger. Keep
+`AXIS_ASSIGNMENT` in `pad.rs` name-matched, with the test that pins it.
 
 **Axis ranges must be declared.** `UI_SET_ABSBIT` alone leaves a range of 0..0, so
 every value collapses to one point and the axis never moves. `UI_ABS_SETUP` is

@@ -81,16 +81,24 @@ pub enum LogicalAxis {
     RightTrigger = 5,
 }
 
-/// Kernel ABS code for each logical axis, in SDL slot order.
+/// Kernel ABS code for each logical axis.
 ///
-/// The right-hand column is deliberately not the same name as the logical axis:
-/// SDL resolves slots positionally, so `RightY` has to use `ABS_RX`.
+/// These are the names they appear to be: left stick on `ABS_X`/`ABS_Y`, right
+/// stick on `ABS_RX`/`ABS_RY`, triggers on `ABS_Z`/`ABS_RZ`. That is the
+/// conventional Linux gamepad layout, and it is what consumers assume.
+///
+/// An earlier version assigned by position instead, putting the right stick on
+/// `ABS_Z`/`ABS_RX` and the triggers on `ABS_RY`/`ABS_RZ`, on the theory that a
+/// consumer would number axes by ascending code. Measured on Steam: it read
+/// `ABS_Z` as the left trigger and `ABS_RY` as the right stick's Y, so pulling
+/// the left trigger moved the right stick. Do not reintroduce the positional
+/// scheme; consumers map these codes by their names.
 pub const AXIS_ASSIGNMENT: [(LogicalAxis, u16); 6] = [
     (LogicalAxis::LeftX, abs::X),
     (LogicalAxis::LeftY, abs::Y),
-    (LogicalAxis::RightX, abs::Z),
-    (LogicalAxis::RightY, abs::RX),
-    (LogicalAxis::LeftTrigger, abs::RY),
+    (LogicalAxis::RightX, abs::RX),
+    (LogicalAxis::RightY, abs::RY),
+    (LogicalAxis::LeftTrigger, abs::Z),
     (LogicalAxis::RightTrigger, abs::RZ),
 ];
 
@@ -682,17 +690,13 @@ impl VirtualPad {
             abs::Y,
             i32::from(crate::encode::centre_axis(state.left_y)),
         )?;
-        // SDL assigns joystick axis slots by the *numeric order of the kernel
-        // ABS codes present*, not by their names:
-        //   a0=ABS_X  a1=ABS_Y  a2=ABS_Z  a3=ABS_RX  a4=ABS_RY  a5=ABS_RZ
-        // and its default gamepad mapping reads a2 as rightx, a3 as righty,
-        // a4 as lefttrigger, a5 as righttrigger.
+        // Kernel ABS codes follow the conventional Linux gamepad layout: the
+        // right stick is ABS_RX/ABS_RY and the triggers are ABS_Z/ABS_RZ.
+        // Consumers map them by name, not by position in the code range.
         //
-        // So the kernel code for each logical axis is NOT the matching name:
-        // right stick Y must go on ABS_RX and the triggers on ABS_RY/ABS_RZ.
-        // Verified by moving one axis at a time and reading back which SDL slot
-        // changed; an earlier version put right stick Y on ABS_RZ, which SDL
-        // reported as the right trigger.
+        // Verified on the target by moving one input at a time and reading the
+        // resulting ABS code; an earlier positional scheme put the right stick
+        // on ABS_Z, which Steam displayed as the left trigger.
         for (logical, code) in AXIS_ASSIGNMENT {
             let value = match logical {
                 LogicalAxis::LeftX => crate::encode::centre_axis(state.left_x),
@@ -802,34 +806,26 @@ mod tests {
     }
 
     #[test]
-    fn axis_assignment_matches_sdl_slot_order() {
-        // SDL assigns slots by numeric ABS code order and its default gamepad
-        // mapping reads a2=rightx, a3=righty, a4=lefttrigger, a5=righttrigger.
-        // The measurement (move one axis, read back which slot changed) gave:
-        //   left_x->a0  left_y->a1  right_x->a2  right_y->a3
-        //   left_trigger->a4  right_trigger->a5
-        // This test pins the code list that produces that, because the codes are
-        // deliberately not name-matched: RightY uses ABS_RX, triggers use RY/RZ.
+    fn axis_codes_follow_the_named_convention() {
+        // Regression: assigning by position put the right stick on ABS_Z and the
+        // triggers on ABS_RY, and Steam displayed the left trigger as the right
+        // stick's Y. These codes are the ones a consumer expects for the names.
         assert_eq!(AXIS_ASSIGNMENT[0], (LogicalAxis::LeftX, abs::X));
         assert_eq!(AXIS_ASSIGNMENT[1], (LogicalAxis::LeftY, abs::Y));
-        assert_eq!(AXIS_ASSIGNMENT[2], (LogicalAxis::RightX, abs::Z));
-        assert_eq!(AXIS_ASSIGNMENT[3], (LogicalAxis::RightY, abs::RX));
-        assert_eq!(AXIS_ASSIGNMENT[4], (LogicalAxis::LeftTrigger, abs::RY));
+        assert_eq!(AXIS_ASSIGNMENT[2], (LogicalAxis::RightX, abs::RX));
+        assert_eq!(AXIS_ASSIGNMENT[3], (LogicalAxis::RightY, abs::RY));
+        assert_eq!(AXIS_ASSIGNMENT[4], (LogicalAxis::LeftTrigger, abs::Z));
         assert_eq!(AXIS_ASSIGNMENT[5], (LogicalAxis::RightTrigger, abs::RZ));
     }
 
     #[test]
-    fn axis_codes_are_ascending_so_sdl_slots_never_swap() {
-        // SDL derives its slot order from the sorted ABS code set. If the
-        // assignment table were not ascending by code, the logical slot order
-        // and SDL's would diverge and sticks would report as triggers.
-        let codes: Vec<u16> = AXIS_ASSIGNMENT.iter().map(|(_, c)| *c).collect();
-        let mut sorted = codes.clone();
-        sorted.sort_unstable();
-        assert_eq!(
-            codes, sorted,
-            "AXIS_ASSIGNMENT must be in ascending code order"
-        );
+    fn every_logical_axis_has_a_distinct_code() {
+        // Two logical axes sharing a code would move together, which is how the
+        // trigger and right-stick bug presented.
+        let mut codes: Vec<u16> = AXIS_ASSIGNMENT.iter().map(|(_, c)| *c).collect();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), AXIS_ASSIGNMENT.len());
     }
 
     #[test]

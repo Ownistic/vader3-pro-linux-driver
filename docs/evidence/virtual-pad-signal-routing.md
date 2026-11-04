@@ -5,6 +5,11 @@ creates the pad through the real `pad::VirtualPad` API, drives one input at a
 time, and asks SDL which joystick slot changed. Every number below is an
 observation, not a derivation.
 
+The axis section was **corrected on 2026-11-03** after Steam on the target
+disagreed with it. The slot numbers were observed correctly; the meaning
+attributed to them was not. That correction is recorded inline rather than
+silently applied, because the same mistaken inference is easy to repeat.
+
 ## Why the probe exists
 
 Two properties of the virtual pad cannot be checked from kernel capability
@@ -19,30 +24,44 @@ Both were previously assumed. Both assumptions were wrong.
 
 ## Axis routing
 
-SDL reports 6 axes. Moving one input at a time produced:
+SDL resolves a joystick axis index by the numeric order of the kernel `ABS_*`
+codes present, so the index a code lands on depends on which codes are declared.
+With all six declared, `a0..a5` are `ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ`.
 
-| Input driven | Slots that changed |
-| --- | --- |
-| `left_x` | `a0` |
-| `left_y` | `a1` |
-| `right_x` | `a2` |
-| `right_y` | `a3` |
-| `left_trigger` | `a4` |
-| `right_trigger` | `a5` |
+What that index *means* is a separate question, and it is decided by the consumer's
+mapping, not by the index. Steam applies the Xbox-style default:
 
-That is exactly what SDL's default gamepad mapping assumes
-(`rightx:a2, righty:a3, lefttrigger:a4, righttrigger:a5`).
+| Index | Kernel code | Steam's meaning |
+| --- | --- | --- |
+| `a0` | `ABS_X` | left stick X |
+| `a1` | `ABS_Y` | left stick Y |
+| `a2` | `ABS_Z` | **left trigger** |
+| `a3` | `ABS_RX` | **right stick X** |
+| `a4` | `ABS_RY` | **right stick Y** |
+| `a5` | `ABS_RZ` | **right trigger** |
 
-**Two defects were found getting there, both user-visible:**
+The right column is the part this document previously got wrong. It recorded the
+slot numbers correctly — moving `right_x` did change `a2` — but then assumed `a2`
+meant right-x. It does not. Driving the axis and reading back the *index* proves
+which slot moved; it does not prove what the consumer calls that slot.
+
+**Two defects were found here, both user-visible:**
 
 - **Axes did not move at all.** `UI_SET_ABSBIT` enables an axis but leaves its
   range at 0..0, so every value collapses to a single point. A range must be
   declared with `UI_ABS_SETUP` (`0x401c5504`, 28-byte struct). Without this, a
   client sees six axes that are permanently centred.
-- **Right stick reported as the right trigger.** Assigning `ABS_*` codes by
-  name put right-stick Y on `ABS_RZ`, which SDL reads as `a5` — the right
-  trigger slot. The correct assignment is positional, not mnemonic: `RightY`
-  uses `ABS_RX` and the triggers use `ABS_RY`/`ABS_RZ`.
+- **Right stick and triggers were crossed.** Assigning `ABS_*` codes positionally
+  put right-stick X on `ABS_Z`, right-stick Y on `ABS_RX` and the left trigger on
+  `ABS_RY`. Steam read `ABS_Z` as the left trigger, `ABS_RX` as right-stick X and
+  `ABS_RY` as right-stick Y, so pulling the left trigger moved the right stick and
+  the right stick's X fired the left trigger. Confirmed on the target and fixed by
+  using the conventional codes: right stick on `ABS_RX`/`ABS_RY`, triggers on
+  `ABS_Z`/`ABS_RZ`.
+
+Assigning by name is correct, and it also means the device works without a custom
+mapping entry: the triggers and sticks line up under the default gamepad layout,
+so `gamecontrollerdb.txt` is needed only for the six extra buttons.
 
 ## Button routing
 
