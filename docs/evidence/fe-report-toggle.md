@@ -62,6 +62,39 @@ with no patch.
 The rumble pulse in both branches is also useful as an oracle: when the right combo
 is pressed, the controller buzzes briefly.
 
+## Tested on hardware: the chord fires, the Bluetooth stream does not change
+
+Owner tested both chords on the controller, connected over **Bluetooth DInput**:
+
+| Chord | Rumble acknowledgement | Stream changed? |
+| --- | --- | --- |
+| FN + M1 + M2 | **yes** (plus a second pulse a few seconds later) | **no** |
+| FN + M3 + M4 | yes | **no** |
+
+Both pulses confirm both matchers fired, so the key-code decode is correct.
+A 60-second Bluetooth capture spanning a plain A press, stick movement, the chord,
+and A plus stick again contains **289 reports, all report id `0x01` at 21 bytes**.
+The motion report was never emitted over Bluetooth.
+
+So the chord sets the same flag the vendor command sets, and the flag changes the
+report the firmware builds — but the **Bluetooth notification path still sends the
+ordinary 21-byte report**. `FUN_00011c44` writes `0xFE` into a report buffer that
+only the wired path transmits, matching the earlier finding that Bluetooth and USB
+have separate dispatch paths.
+
+**Conclusion: the chord is not a route to motion over Bluetooth.** It is still a
+useful discovery — it enables the motion report on USB without sending a command,
+and it confirms which logical keys the back buttons are.
+
+## Side observation: a transient digitizer personality
+
+After the chords, the controller re-enumerated over Bluetooth with a **196-byte
+digitizer descriptor** — Usage Page `0x0D`, touch screen, three finger contacts,
+12-bit absolute X/Y — under `04B4:2412`. A plain reconnect restored the 163-byte
+gamepad descriptor. A digitizer only reports on touch, which explains a window of
+silent captures during this test. The cause was not isolated; it may be a mode the
+chords or an earlier FN+Y sequence selected.
+
 ## What is not yet known
 
 - Which physical buttons correspond to logical codes `0x12`, `0x13`, `0x14`, `0x15`
