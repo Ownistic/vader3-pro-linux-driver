@@ -114,6 +114,16 @@ to use is referenced by no vendor code we have". The remaining explanations are
 that the mobile Flydigi app drives that vendor service over BLE, or that the
 firmware exposes no BLE route at all.
 
+## Status: superseded
+
+**Switch mode solves this.** The controller's Nintendo Switch personality exposes
+live gyro and accelerometer through the stock `hid-nintendo` driver over
+Bluetooth, plus rumble through the standard force-feedback API, on stock
+firmware with no command to send. See [switch-mode.md](switch-mode.md).
+The cost is the M3/M4/C/Z buttons, which that personality never transmits.
+The vendor-mode analysis below remains valid and is kept as the record of why
+that route was closed.
+
 ## Feasibility: what static analysis can and cannot settle
 
 The owner confirms this unit has a gyro, having used it from the Windows app
