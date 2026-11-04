@@ -133,6 +133,30 @@ established, because the always-moving bytes above contaminated the windows.
 authoritative and avoid this ambiguity entirely. That is the next step if the
 host-side parser is resumed.
 
+## A longer timed capture narrowed it, without closing it
+
+A 7-minute recording with four intended phases (left stick, right stick, LT, RT)
+was analysed by change rate, histogram shape and phase window. Sticks sweep
+through the middle of their range; triggers dwell at one end and sweep to the
+other. That separates them:
+
+| Bytes | Idle value | Shape | Likely role |
+| --- | --- | --- | --- |
+| `19` | ~125 | 93% mid-range | stick axis |
+| `21`, `22` | 123, 122 | 62%, 69% mid-range | stick axes |
+| `23` | 0 | 64% at low, sweeps high | trigger |
+| `24` | 0 | 90% at low, sweeps high | trigger |
+
+Buttons occupy byte 7 as recorded above, so these five bytes are the axes.
+
+What remains ambiguous is the **pairing**: three centre-idling bytes cannot cover
+four stick axes, and the phase windows blurred because the always-moving bytes
+(4, 5, 6, 18, 20, 26, 27) were active throughout. Assigning `19` and `21` to one
+stick and `22` to the other would be a guess, so no decode code is written.
+
+`FUN_0000094c` settles this definitively: it stores each field at a known offset.
+Reading its stores is the correct closing step, and it needs no hardware.
+
 What is needed: one capture per control, isolated — left stick alone, right stick
 alone, LT alone, RT alone — with the controller at rest before each. That is a
 few minutes and it removes the ambiguity entirely.
