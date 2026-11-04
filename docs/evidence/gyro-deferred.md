@@ -124,6 +124,12 @@ The cost is the M3/M4/C/Z buttons, which that personality never transmits.
 The vendor-mode analysis below remains valid and is kept as the record of why
 that route was closed.
 
+**Update:** a second toggle for the motion report was found afterwards — a
+physical button combo, not a host command. See
+[fe-report-toggle.md](fe-report-toggle.md). If that combo can be identified, the
+motion report is reachable on stock firmware over any transport, and no patch is
+required.
+
 ## Feasibility: what static analysis can and cannot settle
 
 The owner confirms this unit has a gyro, having used it from the Windows app
