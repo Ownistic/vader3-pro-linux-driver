@@ -54,6 +54,37 @@ hidapi backend for DualShock/DualSense devices. Declaring the axes changes nothi
 so the route is closed at SDL and never reaches Steam. Do not add `ABS_MT` axes to
 the pad on this theory; it would only widen the descriptor for no benefit.
 
+## Could emulating a different controller expose all six?
+
+This was asked directly, and the answer is no for any model Steam supports today.
+The ceiling is set by how many *named* extra inputs a device model has, not by the
+physical pad:
+
+| Model | Extra inputs beyond the 15 standard | Total |
+| --- | --- | --- |
+| Xbox Elite Series 2 | 4 paddles + share (`misc1`) | 5 |
+| DualSense | mute (`misc1`) + touchpad click | 2 |
+| DualShock 4 | touchpad click | 1 |
+| Switch Pro | capture (`misc1`) | 1 |
+
+The richest model is the Elite with five, which is what the current mapping already
+provides. Two tempting ideas and why they do not help:
+
+- **Pretending to be a DualSense.** It would gain the `touchpad` name, but SDL only
+  reports touchpads for hidapi devices, and a hidapi identity means SDL's own PS5
+  report parser defines the inputs — a DualSense has no paddles to bind. Five extras
+  would become two.
+- **SDL3 names.** `misc2`–`misc6` would give enough slots, but Steam ships SDL2, and
+  nothing on this side of the boundary changes that.
+
+A device emulated through UHID rather than uinput would be seen by SDL's hidapi
+backend and could therefore carry a touchpad *button*, but only while also
+inheriting that device model's input set. That trade loses more than it gains.
+
+So the sixth button cannot be a Steam-bindable controller input. If it must be
+usable, it has to stop being one: remap it in the controller to a key, or to a
+button that already has a slot.
+
 ## Consequence
 
 At most **five of the six** extras can be bindable through Steam on a uinput pad:
