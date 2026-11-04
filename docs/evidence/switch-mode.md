@@ -66,6 +66,34 @@ sends them**. Separately, a key-level capture showed:
 That is consistent with the Switch protocol having no spare button slots: a
 Switch Pro Controller has exactly 14 buttons, all of which the Vader uses.
 
+## Can a patch get the extras into Switch mode?
+
+Checked, because it is the obvious next question. Three findings, all against a
+cheap answer:
+
+1. **There is no secondary channel in this personality.** The connected device
+   advertises exactly two GATT services: `00001124` (HID over GATT) and
+   `00001200` (PnP Information). The NUS and vendor services that make the
+   DInput mode scriptable are **absent**, so there is no side channel to poll
+   extra buttons from while the HID stream supplies gyro.
+2. **The descriptor has no spare slots.** Report `0x30` carries 48 bytes with the
+   Switch button layout, and `0x3F` carries a 16-bit button field; both are fully
+   allocated by the Switch protocol. The 105-byte reports `0x31`–`0x33` are the
+   NFC/IR reports, which Linux never requests and which carry NFC data.
+3. **The Switch descriptor is not a literal in any shipped image.** The live
+   170-byte report map is absent from all three firmware files (Telink87 main
+   `6.7.5.1`, `f3si` extension `3.0.2`, dongle `0.4.1.7`), so it is assembled at
+   runtime rather than stored. By contrast the DInput descriptor *is* a literal
+   at `0x23764`, which is why that personality was tractable to analyse.
+
+So a firmware patch would have to locate a runtime-assembled descriptor and the
+report builder behind it before adding a new report and its bits, then flash the
+result. That is a materially larger job than the DInput work, carries the brick
+risk recorded in the patch scope document, and buys only four buttons that are
+already working in DInput.
+
+**Conclusion: no host-side route exists, and a patch is not worth it now.**
+
 ## Trade-off
 
 | | DInput (+ `vader3p-steam`) | Switch mode (no driver) |
