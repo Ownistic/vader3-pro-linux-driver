@@ -199,31 +199,50 @@ EOF
 
 ### 4. Make the six extra buttons visible to Steam
 
-The environment variable below is **verified** — it is how the mapping was
-confirmed against local SDL:
+Without a mapping, SDL still recognises the pad and its sticks, triggers and
+fifteen standard buttons all work. The six extras (C, Z, M1–M4) appear as raw
+button numbers that SDL does not name, so Steam cannot bind them to anything.
+
+Install the mapping as a systemd user environment drop-in, which survives reboots
+and applies to Steam whether it starts from the desktop or from Gaming Mode:
+
+```sh
+mkdir -p ~/.config/environment.d
+grep -v '^#' driver/contrib/gamecontrollerdb.txt | grep -v '^$' \
+  | sed 's/^/SDL_GAMECONTROLLERCONFIG=/' \
+  > ~/.config/environment.d/vader3p-steam.conf
+```
+
+That writes a single `SDL_GAMECONTROLLERCONFIG=...` line. Log out and back in, or
+reboot, so the systemd user manager picks it up — a drop-in is read when the
+session starts, not by an already-running Steam.
+
+Verify it took effect, with the daemon running:
+
+```sh
+systemctl --user show-environment | grep SDL_GAMECONTROLLERCONFIG
+```
+
+If the line is missing, the drop-in was not read yet; if it is present, any Steam
+started after this point will see the extra buttons.
+
+The mapping is one long line, so a stray newline inside it breaks the value
+silently. If the extras stop working, compare what systemd holds against the file:
+
+```sh
+systemctl --user show-environment | grep -o 'paddle1:b17'
+```
+
+For a one-off run without the drop-in, prefix the command instead:
 
 ```sh
 SDL_GAMECONTROLLERCONFIG="$(grep -v '^#' driver/contrib/gamecontrollerdb.txt | grep -v '^$')" steam
 ```
 
-That works but is awkward for daily use. The durable option is to put the entry
-in Steam's own `gamecontrollerdb.txt`. **This is not verified on the target
-machine** — Steam's controller configuration paths differ between versions, so
-check which applies to yours rather than assuming:
-
-```sh
-# Create the file if absent; it may not exist on a fresh install.
-mkdir -p ~/.steam/steam/controller_base
-cat driver/contrib/gamecontrollerdb.txt >> ~/.steam/steam/controller_base/gamecontrollerdb.txt
-```
-
-Only the single uncommented line in that file is the mapping; the rest are
-comments and are ignored by SDL. Re-running the command duplicates the line,
-which is harmless but untidy — remove the old copy first if you redo it.
-
-Restart Steam after either change. If Steam still shows the extras as one button,
-that is the open question this project has not yet closed; the environment
-variable route is the reliable fallback.
+Both routes were verified against the SDL on a Legion Go (Bazzite 44): with the
+mapping applied, `paddle1`–`paddle4`, `misc1` and `touchpad` are all bound; without
+it, SDL reports the same pad but none of them. The axis bindings are identical
+either way, so a missing mapping costs the extras and nothing else.
 
 ---
 
@@ -445,9 +464,10 @@ Idle CPU cost is 0.6% of one core.
   code paths, the reason each route fails, and where the work should resume.
   Do not retry the `0x13` path without a pairing-recovery plan — it once reset this
   controller's Bluetooth bond.
-- **Steam recognition of the six extras is unverified.** The mapping file is
-  built from measured indices and works with local SDL; Steam bundles its own SDL,
-  so it needs confirming there.
+- **Steam binding the six extras is unconfirmed.** SDL on the target is verified to
+  bind `paddle1`–`paddle4`, `misc1` and `touchpad` when the mapping is applied, and
+  the drop-in that supplies it is installed. Whether Steam's own UI exposes all six
+  as separate bindable inputs has not been observed yet — that is the last check.
 - **No LED control.** The chunked LED path (`0x33`) ends in a flash erase/program
   and can commit partial state if a sequence is abandoned, so it is deliberately
   unused. The lighter mode command (`0x13`) was rejected by the device over
