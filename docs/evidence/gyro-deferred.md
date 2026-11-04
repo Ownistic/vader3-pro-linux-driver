@@ -114,6 +114,43 @@ to use is referenced by no vendor code we have". The remaining explanations are
 that the mobile Flydigi app drives that vendor service over BLE, or that the
 firmware exposes no BLE route at all.
 
+## Feasibility: what static analysis can and cannot settle
+
+The owner confirms this unit has a gyro, having used it from the Windows app
+(whether over USB or Bluetooth was not recorded). That removes the earlier "maybe
+there is no IMU" uncertainty, so the question is now purely transport:
+
+| Route | Status | Basis |
+| --- | --- | --- |
+| USB (wired) vendor mode | **reachable** | `FUN_00018138` gets `05`-stripped frames from the wired validator; the same interface already rumbles |
+| 2.4 GHz dongle | untested | `state+0xe == 2` skips the report-builder check entirely |
+| Bluetooth BLE, any command | **no arm exists** | see below |
+
+The BLE command surface is now fully enumerated, and this is the part worth
+stating plainly: there is nothing left to decompile that could change it. Every
+host-writable entry point on the NUS characteristic is accounted for:
+
+| Handler | Matches | Effect |
+| --- | --- | --- |
+| `FUN_00010560` | `AC` | key/led flags |
+| `FUN_000105cc` | `BA 40` | calls `FUN_00010320` |
+| `FUN_000105e8` | `A5 01` | calls `FUN_000103e4` |
+| `FUN_00010604` | `A5 A0` | 13-byte status reply |
+| `FUN_000105a4` | unnamed 4-byte constant | two calls, unidentified |
+| `FUN_0001067c` | `A5 A1` | 20-byte query reply |
+| `FUN_0000b830` | 4-byte, `buf[0]` in `10`–`13` | remap, rumble, table write, mode switches |
+| `FUN_000107a0` | 20-byte + checksum | nine opcodes (`_ R S P Q T @ A U`) |
+
+None of these writes `state+0x2a`, and the symbol sweep already showed that only
+the two `0xEE` arms ever do. So **no amount of further decompilation makes vendor
+mode reachable over BLE**; that conclusion rests on an exhaustive writer search,
+not on missing code.
+
+What static analysis **cannot** answer is whether the *Flashplay* personality
+(FN+Y) streams motion on the same characteristic — that switch happens inside the
+controller on a button combo, not by command, so the published frame format may
+differ. That is a runtime question and needs no decompilation.
+
 ## Why the shake test settles less than it appears to
 
 A whole-controller shake produced no change in bytes 1–4, which are the sticks.
