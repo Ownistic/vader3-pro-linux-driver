@@ -189,6 +189,12 @@ fn scale_ff(magnitude: u16) -> u8 {
     scaled.min(250) as u8
 }
 
+/// Apply a global gain in `0..=0xffff` to a raw magnitude.
+fn apply_gain(magnitude: u16, gain: u16) -> u16 {
+    let scaled = (u32::from(magnitude) * u32::from(gain) + 0x7fff) / 0xffff;
+    u16::try_from(scaled).unwrap_or(u16::MAX)
+}
+
 fn set_bit(file: &File, request: libc::c_ulong, value: u16, what: &str) -> Result<()> {
     let arg = libc::c_int::from(value);
     // SAFETY: the fd is open and these ioctls take an int by value.
@@ -200,13 +206,112 @@ fn set_bit(file: &File, request: libc::c_ulong, value: u16, what: &str) -> Resul
     }
 }
 
+/// Number of effects the kernel may upload.
+///
+/// Matches `ff_effects_max` in `UinputSetup`, and bounds the per-id table below.
+const FF_EFFECTS_MAX: usize = 16;
+
 /// A created uinput gamepad.
 pub struct VirtualPad {
     file: File,
     name: String,
     last_sent: [i32; 32],
-    /// Most recent rumble magnitude requested by the host, if any.
+    /// Current rumble level translated to the firmware's `0..=250` range.
     rumble: Option<(u8, u8)>,
+    /// Forc-feedback bookkeeping, kept separate so it can be tested without a
+    /// uinput device.
+    ff: FfState,
+}
+
+/// Uploaded-effect bookkeeping for the host feedback loop.
+///
+/// Holds what the kernel told us rather than acting on upload: an effect exists
+/// as soon as it is uploaded, but only produces motion while it is playing.
+struct FfState {
+    /// Magnitudes of each uploaded effect, keyed by kernel-assigned id.
+    ///
+    /// Raw `0..=0xffff` values, not scaled: gain is applied at play time, so a
+    /// gain change does not have to rewrite the table.
+    effects: [Option<(u16, u16)>; FF_EFFECTS_MAX],
+    /// Effect currently playing, if any.
+    active: Option<usize>,
+    /// Global gain, `0xffff` meaning full scale.
+    gain: u16,
+}
+
+impl FfState {
+    fn new() -> Self {
+        Self {
+            effects: [None; FF_EFFECTS_MAX],
+            active: None,
+            gain: u16::MAX,
+        }
+    }
+
+    /// Map a kernel effect id to a table slot.
+    ///
+    /// Out-of-range ids are rejected rather than clamped: clamping would let two
+    /// distinct effects alias one slot and overwrite each other's magnitudes.
+    fn slot(id: i16) -> Option<usize> {
+        usize::try_from(id).ok().filter(|s| *s < FF_EFFECTS_MAX)
+    }
+
+    /// Record an uploaded effect without starting it.
+    fn upload(&mut self, id: i16, strong: u16, weak: u16) {
+        if let Some(slot) = Self::slot(id) {
+            self.effects[slot] = Some((strong, weak));
+        }
+    }
+
+    /// Forget an erased effect, stopping it if it was the one running.
+    fn erase(&mut self, id: i16) -> Option<(u8, u8)> {
+        let slot = Self::slot(id)?;
+        self.effects[slot] = None;
+        (self.active == Some(slot)).then(|| self.stop())
+    }
+
+    /// Clear the active effect and return the level that stops the motors.
+    fn stop(&mut self) -> (u8, u8) {
+        self.active = None;
+        (0, 0)
+    }
+
+    /// Translate the active effect's magnitudes, with gain applied.
+    fn active_levels(&self) -> Option<(u8, u8)> {
+        let slot = self.active?;
+        let (strong, weak) = self.effects[slot]?;
+        Some((
+            scale_ff(apply_gain(strong, self.gain)),
+            scale_ff(apply_gain(weak, self.gain)),
+        ))
+    }
+
+    /// Handle an `EV_FF` event.
+    ///
+    /// The kernel reports playback as `(EV_FF, effect id, 1)` to start and
+    /// `(EV_FF, effect id, 0)` to stop; `FF_GAIN` is the one code that is not an
+    /// effect id. An earlier version compared the code against `FF_RUMBLE` and
+    /// ignored `value`, so no stop could be recognised and the motors ran until
+    /// the controller was powered off.
+    fn event(&mut self, code: u16, value: i32) -> Option<(u8, u8)> {
+        if code == FF_GAIN {
+            self.gain = u16::try_from(value.clamp(0, i32::from(u16::MAX))).unwrap_or(u16::MAX);
+            return self.active_levels();
+        }
+
+        let slot = usize::from(code);
+        if value == 0 {
+            // Stop only affects the effect that is actually running; a stop for
+            // another id must not cut off the active one.
+            return (self.active == Some(slot)).then(|| self.stop());
+        }
+
+        if slot >= FF_EFFECTS_MAX {
+            return None;
+        }
+        self.active = Some(slot);
+        self.active_levels()
+    }
 }
 
 impl VirtualPad {
@@ -361,6 +466,7 @@ impl VirtualPad {
             name: name.to_string(),
             last_sent: [i32::MIN; 32],
             rumble: None,
+            ff: FfState::new(),
         })
     }
 
@@ -397,12 +503,15 @@ impl VirtualPad {
 
         let mut changed = None;
         for (type_, code, value) in raw {
-            if type_ == EV_UINPUT {
-                self.handle_uinput_control(code, value)?;
+            let update = if type_ == EV_UINPUT {
+                self.handle_uinput_control(code, value)?
             } else if type_ == ev_type::FF {
-                if let Some(levels) = self.handle_ff_event(code, value) {
-                    changed = Some(levels);
-                }
+                self.handle_ff_event(code, value)
+            } else {
+                None
+            };
+            if update.is_some() {
+                changed = update;
             }
         }
         Ok(changed)
@@ -415,8 +524,9 @@ impl VirtualPad {
     /// node for them returns `EINVAL`-class failures and the kernel's pending
     /// `upload_effect()` then times out, which is exactly what an earlier
     /// version did.
-    fn handle_uinput_control(&mut self, code: u16, request_id: i32) -> Result<()> {
+    fn handle_uinput_control(&mut self, code: u16, request_id: i32) -> Result<Option<(u8, u8)>> {
         let fd = self.file.as_raw_fd();
+        let mut update = None;
 
         match i32::from(code) {
             UI_FF_UPLOAD => {
@@ -431,21 +541,19 @@ impl VirtualPad {
                 let rc = unsafe { libc::ioctl(fd, ff::BEGIN_FF_UPLOAD, &mut upload) };
                 if rc == 0 {
                     let effect = FfEffect::from_bytes(upload.effect);
+                    // Upload only stores the effect. Starting it here is what made
+                    // an earlier version buzz on `upload_effect()` alone, before the
+                    // host ever asked for playback, and again after a stop.
                     if effect.is_rumble() {
-                        // Record the requested level so the main loop can push
-                        // it to the physical controller. The effect parameters
-                        // are in the 0..=0xffff range; scale to 0..=250, the
-                        // firmware's ceiling.
-                        let strong = scale_ff(effect.strong_magnitude());
-                        let weak = scale_ff(effect.weak_magnitude());
-                        self.rumble = Some((strong, weak));
-                        upload.retval = 0;
-                    } else {
-                        // Accept the upload so the host can create the effect,
-                        // but it produces no physical motion. Refusing would
-                        // make clients treat the device as broken.
-                        upload.retval = 0;
+                        self.ff.upload(
+                            effect.id(),
+                            effect.strong_magnitude(),
+                            effect.weak_magnitude(),
+                        );
                     }
+                    // Accept non-rumble effects too. Refusing would make clients
+                    // treat the device as broken, even though they cannot move it.
+                    upload.retval = 0;
                 } else {
                     upload.retval = -1;
                 }
@@ -463,31 +571,32 @@ impl VirtualPad {
                 if rc != 0 {
                     erase.retval = -1;
                 }
-                // An erased effect cannot keep rumbling.
-                self.rumble = None;
+                // An erased effect cannot keep running. Clearing the stored
+                // magnitudes without telling the main loop left the physical
+                // motors retransmitting the last level indefinitely, because the
+                // delivery loop only stops when it is handed a zero level.
+                if let Some(levels) = self.ff.erase(erase.effect_id as i16) {
+                    self.rumble = Some(levels);
+                    update = Some(levels);
+                }
                 // SAFETY: completing the pending erase request.
                 let _ = unsafe { libc::ioctl(fd, ff::END_FF_ERASE, &erase) };
             }
             _ => {}
         }
-        Ok(())
+        Ok(update)
     }
 
-    /// Handle an `EV_FF` event (play, stop, gain).
+    /// Handle an `EV_FF` event by delegating to the feedback state.
+    ///
+    /// The level is remembered here as well, because the delivery loop reads it
+    /// back through [`Self::rumble`].
     fn handle_ff_event(&mut self, code: u16, value: i32) -> Option<(u8, u8)> {
-        match code {
-            // FF_RUMBLE event: value is the effect id; playback itself is
-            // driven by the uploaded magnitudes.
-            FF_RUMBLE => self.rumble,
-            // Gain scales the current effect; treat zero as stop.
-            FF_GAIN => {
-                if value == 0 {
-                    self.rumble = Some((0, 0));
-                }
-                self.rumble
-            }
-            _ => self.rumble,
+        let update = self.ff.event(code, value);
+        if let Some(levels) = update {
+            self.rumble = Some(levels);
         }
+        update
     }
 
     /// The most recent host-requested rumble level.
@@ -784,5 +893,95 @@ mod tests {
         assert_eq!(ioctl::SET_FFBIT, 0x4004_556b);
         // _IOW('U', 3, struct uinput_setup) with size 92 = 0x5c
         assert_eq!(ioctl::DEV_SETUP, 0x405c_5503);
+    }
+
+    // The feedback-loop regressions. Every test here corresponds to behaviour
+    // that reached the controller and had to be fixed by power-cycling it, so
+    // they assert the observable levels the delivery loop acts on.
+
+    #[test]
+    fn uploading_an_effect_does_not_start_it() {
+        // The kernel uploads every effect a client may want to play. Starting on
+        // upload made the controller buzz before the host asked for anything.
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        assert_eq!(ff.event(0, 1), Some((250, 250)));
+    }
+
+    #[test]
+    fn upload_alone_reports_no_level() {
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        assert_eq!(ff.active_levels(), None);
+    }
+
+    #[test]
+    fn stop_event_ends_the_effect() {
+        // The bug that mattered: value 0 was ignored, so the motors kept running
+        // until the controller was switched off.
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        assert_eq!(ff.event(0, 1), Some((250, 250)));
+        assert_eq!(ff.event(0, 0), Some((0, 0)));
+        assert_eq!(ff.active_levels(), None);
+    }
+
+    #[test]
+    fn erasing_the_playing_effect_reports_a_stop() {
+        // Erase used to clear the table without telling the delivery loop, which
+        // left it retransmitting the last level forever.
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        ff.event(0, 1);
+        assert_eq!(ff.erase(0), Some((0, 0)));
+        assert_eq!(ff.active_levels(), None);
+    }
+
+    #[test]
+    fn erasing_an_idle_effect_changes_nothing() {
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        ff.event(0, 1);
+        ff.upload(1, 0xffff, 0xffff);
+        assert_eq!(ff.erase(1), None);
+        assert_eq!(ff.active_levels(), Some((250, 250)));
+    }
+
+    #[test]
+    fn stop_for_another_effect_is_ignored() {
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        ff.upload(1, 0xffff, 0xffff);
+        ff.event(0, 1);
+        assert_eq!(ff.event(1, 0), None);
+        assert_eq!(ff.active_levels(), Some((250, 250)));
+    }
+
+    #[test]
+    fn zero_gain_silences_but_keeps_the_effect() {
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        ff.event(0, 1);
+        assert_eq!(ff.event(FF_GAIN, 0), Some((0, 0)));
+        // Restoring gain brings the still-playing effect back, because the host
+        // never stopped it.
+        assert_eq!(ff.event(FF_GAIN, 0xffff), Some((250, 250)));
+    }
+
+    #[test]
+    fn gain_scales_magnitudes() {
+        let mut ff = FfState::new();
+        ff.upload(0, 0xffff, 0xffff);
+        ff.event(0, 1);
+        assert_eq!(ff.event(FF_GAIN, 0x8000), Some((125, 125)));
+    }
+
+    #[test]
+    fn out_of_range_effect_ids_are_rejected() {
+        // Clamping would alias two effects onto one slot.
+        let mut ff = FfState::new();
+        ff.upload(-1, 0xffff, 0xffff);
+        assert_eq!(ff.active_levels(), None);
+        assert_eq!(ff.event(FF_EFFECTS_MAX as u16, 1), None);
     }
 }

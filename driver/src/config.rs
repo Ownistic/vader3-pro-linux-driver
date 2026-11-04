@@ -64,10 +64,20 @@ impl Config {
     }
 
     /// Load the given path if it exists, else return defaults.
+    ///
+    /// With no path given, the conventional location is tried before falling back
+    /// to defaults. Without this, a config written where the documentation says to
+    /// put it would be silently ignored and rumble would quietly stay off.
     pub fn load_or_default(path: Option<&Path>) -> Result<Self> {
-        match path {
+        Self::load_resolved(path, &Self::default_path())
+    }
+
+    fn load_resolved(explicit: Option<&Path>, default: &Path) -> Result<Self> {
+        match explicit {
             Some(p) if p.exists() => Self::load(p),
-            _ => Ok(Self::default()),
+            Some(_) => Ok(Self::default()),
+            None if default.exists() => Self::load(default),
+            None => Ok(Self::default()),
         }
     }
 
@@ -107,6 +117,32 @@ mod tests {
         assert!(!c.rumble);
         // Unspecified keys keep defaults.
         assert_eq!(c.vendor_id, 0xd7d7);
+    }
+
+    #[test]
+    fn default_path_is_loaded_when_no_path_is_given() {
+        // Regression: the conventional config path was computed but never read, so
+        // following the README produced a working pad with rumble silently off.
+        let dir = std::env::temp_dir().join(format!("vader3p-cfg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(
+            &path,
+            "log_level = \"debug\"\nbluetooth_address = \"AA:BB:CC:DD:EE:FF\"\n",
+        )
+        .unwrap();
+
+        let loaded = Config::load_resolved(None, &path).unwrap();
+        assert_eq!(loaded.log_level, "debug");
+        assert_eq!(
+            loaded.bluetooth_address.as_deref(),
+            Some("AA:BB:CC:DD:EE:FF")
+        );
+
+        std::fs::remove_file(&path).unwrap();
+        let missing = Config::load_resolved(None, &path).unwrap();
+        assert_eq!(missing.log_level, Config::default().log_level);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
