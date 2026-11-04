@@ -1,5 +1,141 @@
 # Handoff — 2026-11-03
 
+**Current research index:** [research-index.md](evidence/research-index.md).
+The 2026-11-04 static pass adds an analog calibration trace, Android OTA
+evidence, and corrections to bootloader and LED persistence claims. Research is
+in progress; the index records incomplete coverage and next static steps.
+The F3-specific Windows updater's observed chunk protocol and limitations are
+in [f3-windows-updater-static.md](evidence/f3-windows-updater-static.md).
+The sensor probe selector and the separate `04 FE 66` USB-bound builder are now
+traced through an endpoint-shaped FIFO in
+[USB motion routing](evidence/usb-motion-routing-static.md), including the
+response formatter's prioritized substitution and input gate. Next resolve its
+input paths, synchronization and register/descriptor mapping, and the distinct outgoing
+staging buffer's peripheral identity; identify axes without assuming sensor type.
+[Staged-frame transport](evidence/staged-frame-transport-static.md) traces that
+buffer through pointer publication and peripheral-register setup. Comparison
+with the TLSR8258 SDK supports an RF interpretation, but the actual chip,
+address aliases and protocol remain unverified; it does not prove a GATT
+notification. Continue
+the unreviewed code and secondary-firmware inventory in the index.
+The receive/queue trace and a bounded search for the staged status byte are
+in [staged-frame transport](evidence/staged-frame-transport-static.md). The
+`FUN_00010980` payload writer is `0x10960`, reached from the Nordic UART
+attribute callback `0x8b0c`; see [BLE callback trace](evidence/ble-attribute-callback-static.md).
+The older attribution to `FUN_00010838` was incorrect. A bounded pointer-base
+search found an RF-receive-DMA-shaped setup for the nearby `0x00847278`
+buffer, but no proven write to the payload fields; see the same transport
+document for instruction addresses and the next trace. The inspected receive
+queue copies into `0x008477cc` and dispatches via shared command handlers,
+not directly into the `FUN_00010980` fields. The ATT write selection and
+callback branch are now traced in the BLE callback document. Its dispatcher
+entry and opcode jump table are identified, as is an MTU-exchange-shaped state
+calculation; upstream packet validation remains open. A separate [static
+trace](evidence/static-subsystems-2026-11-04.md#sensor-state-words-to-nordic-uart-notification-shaped-output)
+connects two sensor-state words to a Nordic UART notification-shaped builder;
+one selector is cleared by initialization and set by a short `0xac` input;
+the packet enters a capacity-gated queue whose consumer publishes slot
+addresses to a peripheral-shaped register. The optional transform appends a
+four-byte computed value, and a paired input path compares four bytes; a
+16-slot outbound descriptor initializer is only a candidate until its loader
+is identified. Context helper register offsets match a published Telink AES
+map. A state-2 branch sets the gate and calls context setup; a conditional
+state-2 writer and selected setup-input sources are now traced. One registered
+intermediate callback conditionally calls that writer; input validation,
+seed-source identity, chip and mode remain unverified. Other selector writers, actual delivery
+and the remaining sample words remain unresolved.
+The saved TX attribute has a client-configuration descriptor; an `AC C0`
+status-shaped notification can report the selector in byte 10. See the
+[subscription and status clues](evidence/static-subsystems-2026-11-04.md#nordic-uart-subscription-and-selector-status-clues)
+and physical follow-up: on 2026-11-04, two accepted TX subscriptions saw no
+notifications at rest or during owner-confirmed movement. No selector command
+was sent in those baselines. In a subsequent owner-authorized `AC 01` test,
+an `AC C0` status reported selector 1 and 12,038 data notifications followed;
+bytes 11–13 changed, but unlabeled movement does not identify gyro axes. The
+selector was not reset after the test; persistence and live firmware version
+remain unknown. See the same evidence document for the hardware observations.
+Marked subsequent movement phases showed the first packed value varying most
+in left/right rotation and the second most in forward/back tilt, under a
+tentative signed-12-bit interpretation; motion type and physical axes remain
+unverified. See [marked phases](evidence/static-subsystems-2026-11-04.md#marked-movement-phases).
+Follow-up [holds, translation and rotation-speed comparison](evidence/static-subsystems-2026-11-04.md#stationary-holds-translation-and-rotation-speed)
+showed larger ranges during faster rotation but also variation during
+translation and hand-held tilt; the signal's physical interpretation remains
+unresolved. [Two sensor register-map comparisons](evidence/static-subsystems-2026-11-04.md#sensor-register-map-comparison)
+strongly support processed gyro-related values on the ST-shaped and QST-shaped
+branches; the active hardware branch, scale, signs and third axis are unknown.
+A direct caller at `0x20cd6` and the packet helper at `0x20898`
+are now traced in the BLE callback document; the registered upstream callback
+is invoked through an indirect path. Its packet pointer is derived from an
+earlier argument under documented state gates. A wider trace identifies its
+consumer in the main-loop ring (`0x008440d0 + 0x4c`) and an RF-DMA-shaped
+ring producer. The registered callback at `0x370c` can set the ring entry's
+selection flag to `0x40` and return a retention result; its other branches and
+the type-3 helper's downstream validation remain partial. The helper copies a
+fixed 24-byte slice into state. The image has a candidate eight-entry,
+64-byte-stride ring descriptor. Published Telink retention-layout documentation
+supports the matching image/RAM offsets, but this firmware's loader and complete
+incoming validation remain unresolved. A wider descriptor-reference scan found
+an additional slot writer but no proven stride/count initializer or overwrite
+in the reviewed paths; aliases remain open. See the BLE callback document.
+The [secondary firmware triage](evidence/secondary-firmware-static.md) now
+records dongle startup and conditional receive-to-endpoint-shaped paths under a
+selected TC32 hypothesis, including a `04 FE 66` serializer, marker-queue
+linkage, copied queue initializer and timer-0-shaped interrupt setup; exact chip,
+cadence, later overwrites and protocol remain unverified. The decoded startup
+zeroes the twelve report-source bytes; an alternate converter can leave prior
+values in place, while its exceptional helper clears the scheduler selector.
+Queue/cache gates leave stale endpoint serialization unproven. The helper's
+conditional startup pointers and command sequences are strongly consistent with
+SPI-NOR read and erase/program. The readback path checks erased/default fields
+and derives a value from four bytes, but full integrity validation, actual flash
+identity and persistence are unverified. A post-read initialization routine
+clears the twelve report-source bytes, and a separate counter-gated path can
+set the scheduler selector to 1; restoration from saved byte `+0x12` is not
+yet established. A configuration-adjacent alias was traced to a distinct
+queue and byte-copy path, not a verified restore. Two producers and selected
+callers for that queue, plus the startup branch skipping the callback copy,
+are traced. Register-fed branches copy input to the shared buffer in a path
+consistent with USB endpoint 5/6. Two statically selected configurations
+declare endpoint `0x05` with a 64-byte maximum packet; neither declares
+`0x06`. The saved Windows F3 SI-upgrade route delegates EXE URLs to an
+external updater, while its ZIP branch is gated to another component type;
+the retained SI ZIP is locally consistent with its extracted image, whose
+high-entropy data include repeated 1,024-byte-spaced blocks and repeated
+32-byte XOR-difference patterns across several distances. This does not
+identify an encoding; its internal format and target CPU remain unresolved.
+A cross-model
+Telink handbook describes endpoints 5/6 as OUT and a
+configurable cache maximum. A USB-reset-shaped branch clears computed endpoint
+control offsets `0x120..0x127`, but not the maximum register. A broader
+computed-base scan identified a generic writer and checked selected callers;
+other writes, actual count bounds, endpoint-6 reachability, and runtime
+callback values remain unknown.
+A separate incoming record
+path compares a CRC-shaped result against its own bytes `+0x12..+0x13`; it is
+not the configuration object.
+The SI image's
+architecture is still unresolved. No controller action or flashing is part of
+the current investigation.
+
+**Follow-up:** See [firmware follow-up](evidence/firmware-followup-2026-11-03.md)
+for application-derived USB stick offsets, corrected serializer and sensor
+interpretations, and static Bluetooth command findings. The revision in that
+follow-up is the baseline for the new investigation; the historical state below
+describes the earlier session.
+
+The bootloader signature and recovery claims below are hypotheses, not proven
+facts. The cited serial updater belongs to an LCD screen-upgrade flow, not an
+established Vader 3 Pro main-MCU path. See the correction in
+[bootloader verification](evidence/bootloader-verification.md).
+The historical statements below that Bluetooth *cannot* emit motion or that
+its entire command surface is known exceed the evidence. The documented tests
+exclude only the paths and conditions they exercised; indirect routes and
+uncharacterized handlers remain open.
+The chord's `0xfe` write targets a settings buffer, not an established USB
+report buffer; the flag is distinct from the `0xEE` flag. See
+[chord evidence](evidence/fe-report-toggle.md).
+
 State of the project at the end of the session that took gyro from "deferred" to
 "answered, with one option left untested".
 

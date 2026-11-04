@@ -1,5 +1,10 @@
 # Mobile app BLE protocol (Flydigi Game Center 7.2.10.5)
 
+> **Correction:** The captured `BA C0` frame does not match the decompiled
+> `FUN_000105cc` test for `BA 40`; the attribution in the table is unsupported.
+> The observed `AA CC` reply must not be assigned to that handler without a
+> further trace. See [firmware follow-up](firmware-followup-2026-11-03.md).
+
 Runtime capture plus firmware cross-reference for the Android app's gamepad
 channel. **Hardware was used**: the controller was connected to a rooted phone
 with full HCI snooping, and the app was driven on-screen.

@@ -1,5 +1,15 @@
 # Vader 3 Pro firmware disassembly (TC32)
 
+> **Follow-up correction:** The `FormatDataFromDInput32` mapping listed in the
+> gyro section misnumbers the normalized stick and button indices. The first
+> four normalized bytes are input bytes 17, 19, 21 and 22. See
+> [firmware follow-up](firmware-followup-2026-11-03.md) for the corrected trace
+> and its limits. Bluetooth reachability statements in this historical report
+> are superseded by the subsequent hardware results linked there.
+> The historical claim that the 32-byte vendor frame has not been traced is
+> superseded by [USB motion routing](usb-motion-routing-static.md), which
+> documents a conditional firmware builder and endpoint-shaped FIFO path.
+
 Static analysis of the official main-MCU image. Nothing was run on hardware and
 no firmware was flashed. This document records only what the decompiled code
 shows, and separates that from what the Windows application implies.

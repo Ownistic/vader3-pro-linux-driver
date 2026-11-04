@@ -1,5 +1,13 @@
 # The vendor report carries live motion at 500 Hz (USB DInput)
 
+> **Follow-up correction:** The stick-byte pairing and limitations on the motion
+> interpretation are documented in [firmware-followup-2026-11-03.md](firmware-followup-2026-11-03.md).
+> The vendor application identifies stick bytes 17, 19, 21 and 22. The labels
+> assigning three 16-bit pairs to gyro below remain unverified hypotheses, and
+> `FUN_0000094c` alone is not the wire serializer. Claims below that a single
+> flag makes this report available over Bluetooth are superseded by the negative
+> Bluetooth results in [fe-report-toggle.md](fe-report-toggle.md).
+
 This settles the assumption the firmware patch scoping rested on: **the report the
 vendor-mode flag selects really does contain live sensor data.**
 

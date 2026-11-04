@@ -1,5 +1,16 @@
 # LED control (`0x33` and `0x13`): reachability and persistence
 
+> **Correction:** The persistence and transport classifications in this
+> historical report are not established. `FUN_00011984` calls
+> `FUN_00008284(0x30000)` and `FUN_00008268(0x30000, ..., 0x97)`;
+> the former reaches `FUN_0001b1a0`, which issues a `0x20` transaction, while
+> the latter uses an indirect call whose target needs verification. This is
+> compatible with a flash operation but does not by itself resolve the address
+> space or prove persistence. Treat these commands as potentially persistent.
+> The existence of the `0x33` USB-dispatch arm does not establish that it is
+> reachable through the Bluetooth 20-byte dispatcher. See
+> [firmware follow-up](firmware-followup-2026-11-03.md).
+
 Static analysis of firmware 6.7.5.1 for the LED-related command paths, prompted
 by the question of whether LED effects could be exposed to Steam. No hardware
 was touched.

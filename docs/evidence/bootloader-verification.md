@@ -1,5 +1,18 @@
 # Does the bootloader verify uploaded firmware?
 
+> **Correction:** This historical analysis does not establish that the image
+> lacks a signature or that the bootloader is CRC-only. A windowed entropy test
+> cannot exclude a shorter, encoded, distributed, or external signature. The
+> updater's displayed reset fields do not describe every byte of the image or
+> every possible device-side check. The verifier and recovery path remain
+> unknown. The suggested modified-image flash is not established as safe and
+> must not be treated as a harmless or lossless test.
+> The cited `OtaSerialPortUpdater` is referenced in the saved Space Station
+> decompilation by `FmUpgradLCDViewModel.StartScreenUpgrade`, specifically its
+> screen `freq` branch. Its protocol has not been connected to the Vader 3 Pro
+> main-MCU updater. The CRC and command table below must not be attributed to
+> that controller without an independently traced caller.
+
 The question that bounds any firmware patch: if the device checks a signature we do
 not have, a modified image can never be flashed.
 

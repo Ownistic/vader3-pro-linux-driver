@@ -1,5 +1,8 @@
 # Evidence retention
 
+For the artifact inventory, subsystem coverage and open research questions, see
+[research-index.md](research-index.md).
+
 Keep distributable protocol facts, upstream commit IDs, artifact SHA-256 hashes,
 REA Evidence IDs, tool versions, limitations, and test results in project docs.
 Never commit installers, DLLs, proprietary decompilation, raw captures, Bluetooth

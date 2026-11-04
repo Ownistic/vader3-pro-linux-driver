@@ -1,5 +1,22 @@
 # Queue topology: why Bluetooth commands cannot reach the dispatcher
 
+> **Correction:** `FUN_0000f8bc` selects a status-shaped byte based on state and
+> a table; the saved decompilation does not show it calculating a checksum. The
+> outgoing chain below should not call that byte a checksum without further
+> tracing. The cited direct-producer scan does not rule out indirect writers.
+> **Transport attribution correction:** the text below labels `0x00800f20`
+> and its associated path as wired USB without a verified register map. A
+> newly traced staged-frame pointer reaches a different peripheral register
+> block; comparison with the TLSR8258 SDK supports an RF interpretation but
+> does not identify the controller chip or radio protocol. See
+> [staged-frame transport](staged-frame-transport-static.md). Assertions below
+> that this register proves a USB-only producer or a Bluetooth notification
+> are hypotheses, not established facts.
+> The assertion below that `5A A5` is output-only is also too broad:
+> `FUN_00000ca8` checks those bytes in its receive-side input buffer. Static
+> recognition does not identify its physical transport or prove acceptance of
+> any particular host write. See [receive-path follow-up](staged-frame-transport-static.md).
+
 > **PARTLY SUPERSEDED.** The queue analysis below is accurate for
 > `FUN_00018138` and `FUN_000183c8`. But those are not the only dispatchers:
 > `FUN_0000b830`, reached from the GATT payload handler `FUN_00010980`, is a

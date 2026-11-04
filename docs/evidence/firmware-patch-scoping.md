@@ -1,5 +1,13 @@
 # Firmware patch scoping: gyro while keeping the extra buttons
 
+> **Correction:** The `FUN_0000a704` branch discussed below is part of a
+> six-channel analog control/calibration path, not established as an IMU enable.
+> Its flags are not a verified gyro patch point. See
+> [static subsystem traces](static-subsystems-2026-11-04.md). Claims that a
+> signature is absent or that a flash test is safe are also not established.
+> The serial updater cited below is used by the LCD screen-upgrade flow, and
+> its applicability to the Vader 3 Pro main MCU has not been established.
+
 Goal: one personality that reports **both** the M1–M4/C/Z buttons and motion, so a
 single Steam device has everything.
 

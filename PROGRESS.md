@@ -1,5 +1,24 @@
 # Progress
 
+## Experimental Bluetooth motion implementation (in progress)
+
+The owner requested an opt-in Steam-motion prototype on 2026-11-04. The
+Nordic UART TX path has been observed on hardware, but only two processed
+values have been identified; axes, units, third axis and Steam sensor backend
+are unresolved. `driver/src/motion.rs` adds a tested experimental decoder;
+it is not connected to the daemon or exposed to Steam. Baseline `cargo test`
+passed 107 tests; after the decoder it passed 109. Rust-analyzer was
+unavailable to AFT. The owner requires preserving rumble and all existing
+features; a UHID experiment that temporarily drops them is not authorized.
+`/dev/uhid` was made accessible during this session. Separate uinput sensor
+nodes are not sufficient for SDL's common-parent association according to
+[padctl issue 81](https://github.com/BANANASJIM/padctl/issues/81); this is
+external evidence, not a local Steam verification. Next establish a
+Steam-recognized virtual motion backend without regressing the existing
+uinput gamepad and rumble, then implement
+opt-in transport lifecycle, provisional mapping and disconnect handling.
+The historical native-gyro deferral below predates this evidence.
+
 ## Current state (pre-release)
 
 The project now has a **working userspace driver**, not only research. Summary;
