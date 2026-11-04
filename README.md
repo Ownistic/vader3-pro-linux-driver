@@ -464,10 +464,13 @@ Idle CPU cost is 0.6% of one core.
   code paths, the reason each route fails, and where the work should resume.
   Do not retry the `0x13` path without a pairing-recovery plan — it once reset this
   controller's Bluetooth bond.
-- **Steam binding the six extras is unconfirmed.** SDL on the target is verified to
-  bind `paddle1`–`paddle4`, `misc1` and `touchpad` when the mapping is applied, and
-  the drop-in that supplies it is installed. Whether Steam's own UI exposes all six
-  as separate bindable inputs has not been observed yet — that is the last check.
+- **Five of the six extras are bindable in Steam; Z is not.** Verified on the target:
+  C and M1–M4 bind as `misc1` and `paddle1`–`paddle4`, but Z occupies `touchpad`,
+  the one name SDL2 offers that Steam ignores on a generic device. SDL2's evdev
+  backend never reports touchpads, so declaring touchpad axes does not help —
+  measured, not assumed. See
+  [docs/evidence/steam-extra-buttons.md](docs/evidence/steam-extra-buttons.md),
+  which also records the swap and firmware-remap alternatives.
 - **No LED control.** The chunked LED path (`0x33`) ends in a flash erase/program
   and can commit partial state if a sequence is abandoned, so it is deliberately
   unused. The lighter mode command (`0x13`) was rejected by the device over

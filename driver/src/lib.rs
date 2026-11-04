@@ -156,12 +156,18 @@ pub struct Translator {
     /// Exclusive grabs on the physical controller's evdev nodes, held for the
     /// process lifetime so the controller does not appear twice.
     _grabs: Vec<suppress::ExclusiveGrab>,
+    /// sysfs node of the attached controller, needed to re-grab after a
+    /// reconnect recreates the evdev nodes.
+    sysfs: std::path::PathBuf,
     rumble: RumbleSink,
     last_state: State,
     /// True while host feedback is active, so frames are re-sent before the
     /// firmware timeout expires.
     rumble_levels: Option<(u8, u8)>,
     last_rumble_send: Instant,
+    /// Throttles reconnection attempts so a lost device does not mean a sysfs
+    /// scan on every loop iteration.
+    last_attach_attempt: Instant,
 }
 
 impl Translator {
@@ -260,10 +266,12 @@ impl Translator {
             physical,
             virtual_pad,
             _grabs: grabs,
+            sysfs,
             rumble,
             last_state: State::default(),
             rumble_levels: None,
             last_rumble_send: Instant::now(),
+            last_attach_attempt: Instant::now(),
         })
     }
 
@@ -281,22 +289,47 @@ impl Translator {
             // 0.16 ms minimum, which is the sleep quantised and nothing else.
             // The timeout keeps the rumble service tick and the stop check
             // responsive when the controller is idle.
-            self.physical.wait_readable(poll)?;
+            //
+            // A failure here means the fd died with the link, exactly like a read
+            // failure, so both paths recover the same way instead of exiting.
+            let outcome = match self.physical.wait_readable(poll) {
+                Err(e) => Err(e),
+                Ok(_) => self.physical.read_state(),
+            };
 
-            match self.physical.read_state() {
+            match outcome {
                 Ok(Some(state)) => {
                     if state != self.last_state {
                         self.last_state = state;
                         log_debug!(self.log, "state: {}", describe(&state));
-                        self.virtual_pad.send(&state)?;
+                        if let Err(e) = self.virtual_pad.send(&state) {
+                            log_warn!(self.log, "could not report input: {e:#}");
+                        }
                     }
                 }
                 Ok(None) => {}
                 Err(e) => {
                     if connected {
-                        log_warn!(self.log, "physical device error: {e:#}");
+                        log_warn!(self.log, "physical device lost: {e:#}");
                         connected = false;
                         self.neutralise()?;
+                        self.rumble_levels = None;
+                    }
+                    // A sleeping controller is normal, and it returns on new
+                    // hidraw and evdev nodes. Without re-attaching, the daemon
+                    // kept a dead fd: it stopped grabbing the physical node, so
+                    // Steam read the raw DInput stream and drew garbage, and the
+                    // virtual pad froze on its last state until someone restarted
+                    // the service.
+                    if self.reattach()? {
+                        connected = true;
+                        log_info!(
+                            self.log,
+                            "physical device reconnected: {}",
+                            self.physical.path.display()
+                        );
+                    } else {
+                        std::thread::sleep(Duration::from_millis(100));
                     }
                 }
             }
@@ -306,6 +339,84 @@ impl Translator {
 
         self.neutralise()?;
         Ok(())
+    }
+
+    /// Try to attach to the controller again after the link dropped.
+    ///
+    /// Returns `true` when a device was attached. Throttled to one attempt per
+    /// second, because a disconnected controller means this is called from the
+    /// poll loop until it returns.
+    ///
+    /// Re-attaching replaces everything that is bound to the old node: the
+    /// hidraw handle, the evdev grabs, and the rumble sink. A rumble sink left
+    /// pointing at the previous hidraw path is silently useless, and a stale
+    /// grab means the physical pad reappears alongside the virtual one.
+    fn reattach(&mut self) -> Result<bool> {
+        if self.last_attach_attempt.elapsed() < Duration::from_secs(1) {
+            return Ok(false);
+        }
+        self.last_attach_attempt = Instant::now();
+
+        let Some(candidate) = device::discover_candidates().into_iter().next() else {
+            return Ok(false);
+        };
+
+        let physical = match device::PhysicalDevice::open(&candidate.path) {
+            Ok(physical) => physical,
+            Err(e) => {
+                log_debug!(self.log, "reconnect attempt failed: {e:#}");
+                return Ok(false);
+            }
+        };
+
+        // Re-grab before publishing the new device, so the window in which the
+        // physical pad is readable does not overlap with normal operation.
+        let mut grabs = Vec::new();
+        if self.cfg.suppress_physical {
+            for node in suppress::evdev_nodes_for(&candidate.sysfs) {
+                match suppress::ExclusiveGrab::acquire(&node) {
+                    Ok(grab) => grabs.push(grab),
+                    Err(e) => log_warn!(self.log, "could not suppress {}: {e:#}", node.display()),
+                }
+            }
+        }
+
+        self.rumble = self.rebind_rumble(&candidate.path);
+        self.physical = physical;
+        self.sysfs = candidate.sysfs;
+        self._grabs = grabs;
+        self.last_state = State::default();
+        Ok(true)
+    }
+
+    /// Rebuild the rumble sink for a freshly opened device.
+    fn rebind_rumble(&self, hidraw: &std::path::Path) -> RumbleSink {
+        if !self.cfg.rumble {
+            return RumbleSink::Disabled("disabled by configuration");
+        }
+        let Some(addr) = self.cfg.bluetooth_address.as_deref() else {
+            return RumbleSink::Usb {
+                path: hidraw.to_path_buf(),
+            };
+        };
+
+        // The BlueZ object is recreated when the controller reconnects, so the
+        // old writer's file descriptor may refer to nothing.
+        match rumble::bluez::NusWriter::connect(addr) {
+            Ok(writer) => {
+                log_info!(
+                    self.log,
+                    "rumble reconnected via Nordic UART characteristic"
+                );
+                RumbleSink::Bluetooth(writer)
+            }
+            Err(e) => {
+                log_warn!(self.log, "rumble reconnect failed: {e:#}");
+                RumbleSink::Usb {
+                    path: hidraw.to_path_buf(),
+                }
+            }
+        }
     }
 
     /// Drive the host feedback loop.

@@ -37,6 +37,15 @@ consumer would number axes by ascending code; on Steam that put the left trigger
 on the right stick's Y and made the right stick's X fire the left trigger. Keep
 `AXIS_ASSIGNMENT` in `pad.rs` name-matched, with the test that pins it.
 
+**The virtual pad outlives the controller link.** It is created at startup and
+kept for the daemon's lifetime; a dropped link neutralises the pad's state rather
+than destroying the device. Recreating it on every disconnect would make Steam
+re-enumerate, reshuffle controller slots and emit disconnect toasts each time the
+controller sleeps. The daemon re-attaches to the physical controller in place,
+rebinding the hidraw handle, the evdev grabs and the rumble sink, because a stale
+handle silently stops suppressing the physical node — Steam then reads the raw
+DInput stream and draws nonsense.
+
 **Axis ranges must be declared.** `UI_SET_ABSBIT` alone leaves a range of 0..0, so
 every value collapses to one point and the axis never moves. `UI_ABS_SETUP` is
 required.
