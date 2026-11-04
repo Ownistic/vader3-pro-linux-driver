@@ -1,177 +1,150 @@
-# Firmware patch scoping: Bluetooth rumble on the Vader 3 Pro
+# Firmware patch scoping: gyro while keeping the extra buttons
 
-> **OBSOLETE.** No firmware patch is required. Bluetooth rumble works on stock
-> 6.7.5.1 with a 4-byte frame on the Nordic UART service. See
-> [bluetooth-rumble-solved.md](bluetooth-rumble-solved.md). This document is
-> retained as a record of the scoping work and of what the update mechanism
-> looks like, which remains relevant if a patch is ever needed for something
-> else.
+Goal: one personality that reports **both** the M1–M4/C/Z buttons and motion, so a
+single Steam device has everything.
 
-Scope assessment for adding a Bluetooth command path to firmware 6.7.5.1 so that
-rumble can be driven over the Bluetooth DInput link. This document records what
-a patch would have to change, what is and is not known about the update
-mechanism, and the risks. **No patch has been built, tested, or flashed.**
+Status: **scope only. No patch has been built, tested, or flashed.**
 
-Target artifact: `Telink87_For_F3_Ver6.7.5.1.bin`
-(`f3_v6.7.5.1.zip`), 152068 bytes, SHA-256 `6cba3054…53e20a`.
+Target artifact: `Telink87_For_F3_Ver6.7.5.1.bin` (`f3_v6.7.5.1.zip`),
+152 068 bytes, SHA-256 `6cba3054…53e20a`. The owner's unit reports **6.7.5.1**
+from the mobile app, so this image matches the device.
 
-## Why a patch is the remaining option
+> Rumble no longer motivates a patch: it works on stock firmware over the Nordic
+> UART service ([bluetooth-rumble-solved.md](bluetooth-rumble-solved.md)). The
+> update-mechanism, header and risk sections below are retained because they
+> apply to any patch.
 
-Rumble works over USB DInput (`05 0F` to `mi_02`, verified on hardware). Over
-Bluetooth DInput it cannot work through any host-side route, for two independent
-reasons established in
-[bluetooth-queue-topology.md](bluetooth-queue-topology.md):
+## The two shapes
 
-1. The Bluetooth DInput descriptor declares **zero output reports**, so there is
-   no HID channel for a host to send anything.
-2. The inbound command queue (`0x00845e14`) is fed only by the wired USB frame
-   validator (`FUN_00000d54` ← `FUN_00001014` ← hardware register `0x00800f20`).
+### Option A — add motion to Bluetooth DInput (preferred)
 
-A Bluetooth write can reach `FUN_00019fa4`, and that function does dispatch to
-`FUN_000183c8`, whose `A5 12` subcommand calls the rumble primitive
-`FUN_0000b62c(500, L, R)`. But hardware testing of exactly that frame over the
-Nordic UART service produced no vibration, so either the write does not reach
-`FUN_00019fa4`, or the path needs preconditions not yet met. **This is the one
-open question that would make a patch unnecessary**, and it is unresolved.
+Keep the DInput personality, which already has every button, and make the
+firmware emit its vendor report (with motion) over the existing link.
 
-## What the patch would have to do
-
-Two viable shapes, in increasing invasiveness.
-
-### Option A: reach rumble from the existing Bluetooth dispatcher
-
-**Status: no longer viable as originally stated.** See
-[bluetooth-reachability.md](bluetooth-reachability.md): the Bluetooth handlers
-sit behind a radio packet interface, and a GATT write does not appear to reach
-them, so adding a branch there would add code to a path the host write never
-enters. Recorded here for completeness.
-
-Add a rumble branch to `FUN_00018828`, which is already called from the
-Bluetooth receive path (`FUN_00019a50` → `FUN_00018828`) with
-`buf = 0x008477cc`, `len = *(0x0084652a)`.
-
-The function already has the exact rumble pattern in its short-frame branch:
+Evidence that this is close: the sensor path is gated on a **mode byte**, and both
+branches are already understood.
 
 ```c
-FUN_0000b62c(500, cVar5, cVar4);          /* pair A */
-FUN_0000b6a4(500, pcVar2[3], pcVar2[4]);  /* pair B */
+/* FUN_0000a704 */
+if ((*(char *)(state + 0x11) == 2) || (*(char *)(state + 0x76) == 1)) {
+    FUN_0000a598(param_1);      /* use real sensor values */
+} else {
+    FUN_0000b0c4();             /* otherwise fill 0x05DC (1500) defaults */
+}
 ```
 
-**Size:** roughly 20–30 bytes of TC32. A trampoline into a code cave is
-unnecessary — the branch can be inserted in place.
+- `state+0x11` is the personality: `FUN_00011bbc(2)` sets **2** (Switch) and
+  `FUN_00011bbc(1)` sets **1** (DInput).
+- `state+0x76` is the sensor enable that `0x13 05 01` already sets over Bluetooth
+  (`FUN_0000b500`). That command **is** reachable from the host today — it is the
+  `0x13` case in `FUN_0000b830`.
+- The vendor report builder `FUN_0000094c` exists and reads `state+0xde` to choose
+  the vendor layout.
 
-**Problem:** this only helps if some GATT write reaches `FUN_00018828`, which is
-unproven and which the hardware tests contradict. Option A is therefore
-conditional on resolving that first.
+So in principle a host command could put DInput into "use the sensors" state
+without changing personality.
 
-### Option B: add a Bluetooth output report and route it to rumble
+**The blocker is not reachability, it is this:** what `FUN_0000094c` writes into
+the motion bytes has not been traced to a live source. The two 16-bit fields it
+copies (`state+0x90`, `state+0x92`) belong to `FUN_0000a598`, which is a
+**min/max calibration** accumulator, not a live sample. Until the actual sample
+source is identified, "the vendor report carries gyro" is an assumption inherited
+from host-side inference.
 
-Follow the Bluetooth **XInput** personality, whose descriptor at `0x24098`
-declares an output report the DInput descriptor lacks. That gives a working
-host→device HID channel over Bluetooth, and the report handler can call
-`FUN_0000b62c` directly.
+Before any patch, that assumption must be tested — see *Recommended order*.
 
-**Size:** descriptor edit plus handler, tens of bytes.
+### Option B — add the extra buttons to Switch mode
 
-**Problem:** the DInput descriptor is a fixed 163-byte blob at `0x23764`, and
-the attribute table pointers around `0x23800`–`0x23a10` are position-sensitive.
-Appending an output report item changes the descriptor length, which the
-attribute entry stores. There is no room to grow in place — the region
-`0x23764`–`0x23800` holds the descriptor and the attribute table starts
-immediately after at `0x23808`.
+Checked and rejected for now:
 
-### Space available
+1. Switch mode exposes **only** HID over GATT (`00001124`) and PnP (`00001200`).
+   No NUS, no vendor service, so no side channel exists.
+2. Every declared button slot is allocated by the Switch protocol; `0x30` has the
+   standard layout and `0x3F` a 16-bit field.
+3. The 170-byte Switch report map is **not a literal in any shipped image**
+   (main, `f3si`, dongle), so it is assembled at runtime. The DInput descriptor by
+   contrast is a literal at `0x23764`, which is why that personality is tractable.
+
+A patch here would also require a custom host parser for the added report, since
+`hid-nintendo` would ignore it.
+
+## Space available
 
 | Region | Size | Content |
 | --- | --- | --- |
-| `0x04750`–`0x07fff` | 14513 B | zero fill, plausible code cave |
+| `0x04750`–`0x07fff` | 14 513 B | zero fill, plausible code cave |
 | `0x03d6f`–`0x04000` | 641 B | zero fill |
 | `0x03b63`–`0x03d64` | 513 B | zero fill |
 | `0x23b50`–`0x23d7a` | 554 B | `0xFF` fill |
 
-Space is not the constraint.
+Space is not the constraint. For Option A the descriptor needs no change at all,
+which removes the structural risk that dominated the old rumble plan.
 
 ## The update mechanism
 
-`OtaSerialPortUpdater` (decompiled from Space Station 3.4.4.3) is the updater:
+`OtaSerialPortUpdater` (Space Station 3.4.4.3):
 
 | Property | Value |
 | --- | --- |
-| Transport | USB serial port, 921600 8N1 |
+| Transport | USB serial, 921600 8N1 |
 | Commands | `1` GetBaseAddr, `2` GetVersion, `3` EraseSector, `5` WriteData, `9` ResetDevice |
 | Chunk size | 55 bytes |
-| Integrity | **CRC32 only**, computed over the whole image |
-
-Integrity check at reset (`CmdType.RestDevice`):
+| Integrity | **CRC32 only**, over the whole image |
 
 ```csharp
 uint firmwareLength = (uint)DataAllArray.Length;
 int  crc            = AppOtasCrcCal(firmwareLength);   /* CRC32 over image */
 otaSendBuffer[num++] = 8;                               /* ResetDevice */
-Buffer.BlockCopy(BitConverter.GetBytes(firmwareLength), 0, otaSendBuffer, num, 4);
-Buffer.BlockCopy(BitConverter.GetBytes(crc),            0, otaSendBuffer, num + 4, 4);
 ```
 
-`crcTable` is the standard reflected CRC-32 table (first entries `0`,
-`1996959894`, `3993919788`…), so a modified image needs its CRC recomputed.
+`crcTable` is the standard reflected CRC-32 table, so a modified image needs its
+CRC recomputed.
 
-**No signature or asymmetric verification appears anywhere in the updater.**
-`FirmwareUpgradeUtils.AESkey` is declared as `public static string AESkey` and
-referenced exactly once in the whole decompiled application — its own
-declaration. It is never assigned and never used.
-
-**This is the single most important unknown.** Absence of verification in the
-Windows application does not prove absence in the bootloader. The bootloader is
-not in the OTA image we have. Without it, we cannot rule out that the device
-verifies a signature before accepting a new image, and no amount of application
-analysis settles it.
+**No signature verification appears anywhere in the updater.** `AESkey` is
+declared, referenced once, and never assigned or used. That does **not** prove the
+bootloader behaves the same — the bootloader is not in this image.
 
 ## Image header
-
-First 32 bytes of the OTA image:
 
 ```
 0x00  0e 80 06 03 02 01 5d 02 4b 4e 4c 54 0d 00 88 00
 0x10  de 80 00 00 00 00 00 00 04 52 02 00 00 00 00 00
 ```
 
-`0e 80` reads as 0x800E little-endian, a plausible entry vector. `KNLT` at
-offset 8 is the ASCII tag used by the Telink OTA toolchain. The meaning of the
-remaining fields is not established here and would need to be, because the
-bootloader may validate any of them.
+`0e 80` is a plausible entry vector; `KNLT` at offset 8 is the Telink tag. The
+remaining fields are not established, and the bootloader may check any of them.
 
 ## Risks
 
 | Risk | Assessment |
 | --- | --- |
-| Device verifies a signature | **Unknown.** Would make the patch impossible without FlyDigi's key |
-| Bootloader rejects modified image | Possible even with valid CRC; header fields may be checked |
-| Bricking | Interrupted flash write, or an image that passes CRC but fails a later check, leaves a device with no working firmware |
-| No recovery path | No SWD/UART pads identified on the controller. Recovery likely requires opening the shell |
-| Losing the stock image | Mitigated: the stock 6.7.5.1 image is retained in `local/research/firmware/` |
+| Bootloader verifies a signature | **Unknown.** Would end the project without FlyDigi's key |
+| Bootloader rejects a modified image | Possible even with a valid CRC |
+| Bricking | No SWD/UART pads identified; recovery likely needs opening the shell |
+| Side effects of `0x13 05 01` | **Observed once**: the controller disconnected and the bond was lost on this unit |
+| Losing the stock image | Mitigated: 6.7.5.1 retained in `local/research/firmware/` |
 
-The device is the owner's only unit of this model and is required for daily use.
-A brick is not a recoverable inconvenience here.
+The owner has one unit of this model and needs it daily. A brick is not a
+recoverable inconvenience.
 
 ## Recommended order
 
-1. **Resolve the `FUN_00019fa4` reachability question.** ~~If a GATT write can
-   reach that handler, `A5 12` rumble may already be possible and no patch is
-   needed.~~ **Resolved:** the handlers sit behind a radio packet interface that
-   a GATT write does not appear to reach. See
-   [bluetooth-reachability.md](bluetooth-reachability.md). A patch must hook the
-   GATT write layer itself, or add an output report.2. **Establish whether the device verifies uploaded images.** Read the installed
-   version, and if possible observe a legitimate OTA update. This bounds the
-   whole project.
-3. **Only then** implement the minimal branch from Option A, if step 1 shows the
-   handler is reachable but the existing subcommands are wrong.
-4. **Option B** last, because the descriptor is fixed-size and the change is
-   structurally riskier.
+1. **Test whether the vendor report carries live motion, over USB.** Wired DInput
+   reaches the vendor path unmodified (`FUN_00018138`, verified for rumble on
+   `mi_02`). Send `05 EE 01`, rotate the controller, and check bytes 11–13 of the
+   resulting `04 FE` frames for movement. **No flashing, no risk** — and it either
+   validates Option A or kills it before any code is written.
+2. **Identify the motion sample source** in `FUN_0000094c` / `FUN_0000a598` if
+   step 1 shows movement. This is the work the patch would depend on.
+3. **Establish whether the bootloader verifies uploaded images**, ideally by
+   observing a legitimate OTA with the network captured. This bounds everything.
+4. **Only then** write the Option A branch: one arm that sets `state+0x76`, in a
+   code cave, with the CRC recomputed.
 
 ## What is not yet known
 
-- Whether the installed firmware matches 6.7.5.1.
-- Whether the bootloader validates a signature, and what header fields it checks.
-- Whether `FUN_00019fa4` is reachable from any GATT write.
-- The meaning of the OTA header fields beyond the entry vector and `KNLT` tag.
-- Whether the device exposes any recovery interface without disassembly.
+- Whether the vendor report carries live motion at all (step 1 decides this).
+- Which function produces the live IMU sample that `FUN_0000094c` would copy.
+- Whether `0x13 05 01`'s bond reset is inherent or incidental to that selector.
+- Whether the bootloader validates a signature, and which header fields it checks.
+- Whether any recovery interface exists without disassembly.
