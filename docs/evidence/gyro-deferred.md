@@ -17,12 +17,71 @@ the report bytes.
 | The 21-byte Bluetooth DInput report has no motion fields | Hardware | Shake test; bytes 1–4 are the sticks |
 | Motion exists only in vendor mode, gated by `state+0x2a` | Firmware | `FUN_0001a868` report-builder branch |
 | Vendor mode is enabled by subcommand `0xEE` in `FUN_00018138` | Firmware | Dispatcher case at the `-0x12` comparison |
+| `state+0x2a` has exactly **two** writers in the whole image | Firmware | Symbol sweep over every pool holding `0x00846ac8`; both are `0xEE` arms |
+| A second `0xEE` arm exists in `FUN_000183c8`, reachable from `FUN_00019fa4` for frames of 15+ bytes | Firmware | `FUN_00019fa4` length test at `0x19faa` |
+| Neither `0xEE` arm has a proven Bluetooth write path | Firmware | See "The second `0xEE` arm" below |
 | `FUN_00018138` is **not** reachable from a Bluetooth GATT write | Firmware | Only producer of its queue is the USB validator |
 | The proven Bluetooth channel dispatches `FUN_0000b830`, which has no `0xEE` arm | Firmware | 4-byte payload path; arms are `0x10`–`0x13` only |
 | Vendor mode has been observed active on real hardware | **Never** | The `0x13 05` test disconnected the controller instead |
 
 The last row is the one that keeps this honest. Everything above it is code, and
 code is not behaviour.
+
+## The second `0xEE` arm, and the one route that stays open
+
+There are two dispatchers with a `0xEE` case, not one:
+
+| Dispatcher | Reached from | `0xEE` arm |
+| --- | --- | --- |
+| `FUN_00018138` | `FUN_00018828` and `FUN_0001a0cc` | sets `state+0x2a` to 1 or 0 |
+| `FUN_000183c8` | `FUN_00018828` (when `state+0xe == 2`) and `FUN_00019fa4` | same |
+
+`FUN_00019fa4` is the interesting one. It is the personality dispatcher, and its
+gate is only about length:
+
+```c
+bVar1 = *length;
+if (bVar1 == 0) return;
+if (bVar1 != 8) {
+    if (bVar1 < 0xf) return;        /* 1..7 and 9..14 are dropped */
+    FUN_000183c8(payload, 1);        /* 15+ bytes: full command dispatch */
+    return;
+}
+/* length == 8: the A5 BA / A5 BB rumble pair */
+```
+
+So **any frame of 15 bytes or more reaches `FUN_000183c8`, including its `0xEE`
+arm.** That is the shortest remaining distance to vendor mode, and it is shorter
+than this document previously assumed.
+
+The obstacle is upstream. `FUN_00019fa4` is called from `FUN_0001a148`, which
+selects it only when `*0x001a18c == 2`, and `FUN_0001a148` in turn has a single
+caller: the frame pump `FUN_0001c920`. That pump drains a peripheral FIFO at
+`0x0080011d`/`0x0080011e` into a 68-byte stack buffer — a wired path, not a GATT
+write. Consistent with that, the target frame buffer `0x8477cc` (length at
+`0x84652a`) has exactly two writers in the image: `FUN_00019a50`, fed by the
+software queue `0x00845e14`, and `FUN_0001a148` itself.
+
+**No GATT producer was found for either writer.** That is the whole remaining
+question, and it is narrower than "find the BLE stack": it is only whether some
+ATT write callback feeds `FUN_0001a148` or the `0x00845e14` queue.
+
+## The reachable channel is now fully inventoried
+
+The earlier note that the proven channel "dispatches `FUN_0000b830`" understated
+it. `FUN_00010980` branches on length alone:
+
+| Length | Route |
+| --- | --- |
+| `< 5` | six handlers (`FUN_00010604`, `0x1067c`, `0x10560`, `0x105cc`, `0x105e8`, `0x105a4`), then `FUN_0000b830(buf, 4)` |
+| `5`–`19` | **nothing** |
+| `== 20` | additive checksum over bytes 0–18, then `FUN_000107a0` and `FUN_00010530` |
+| other | nothing |
+
+That inventory is not what rules gyro out, though — the symbol sweep is. Every
+writer of `state+0x2a` in the image is one of the two `0xEE` arms, so no amount of
+work inside the reachable dispatch sets it unless a route to a `0xEE` arm exists.
+Inventoring the arms only confirms the sweep.
 
 ## Why the shake test settles less than it appears to
 
@@ -128,13 +187,15 @@ feature nobody has confirmed is even present on this model.
 Three approaches, in rough order of cost. The first is the only one that needs no
 new firmware knowledge.
 
-**1. Find the GATT write handler in the Telink BLE stack.** This is the same
-missing function that
-[bluetooth-reachability.md](bluetooth-reachability.md) names as the hook point for
-a firmware patch. It is required for gyro for a simpler reason: it is the only
-place where a host-written payload could be forwarded to `FUN_00018138`. Locating
-it answers whether `05 EE 01` over NUS is possible at all, with no device risk —
-it is static work. This is the recommended first step.
+**1. Find whether any GATT write reaches `FUN_0001a148` or the `0x00845e14`
+queue.** This is the narrow version of "find the BLE stack", and it is the only
+static question left that can still make gyro work without new firmware. A 15+
+byte frame delivered to `FUN_0001a148` with selector 2 is sufficient — the `0xEE`
+arm is already there. The firmware's GATT database has a HID Report output
+characteristic (report reference ID 1 / OUTPUT) even though the report map
+declares no output report, and a vendor characteristic whose writes are followed
+by disconnects. Either could be the producer; the disconnect in particular is
+evidence that those writes reach firmware code rather than being discarded.
 
 **2. Test whether the 20-byte path's checksum gate can carry `0xEF`-style
 commands.** `FUN_000107a0` handles nine opcodes but is reached only after the
@@ -151,17 +212,22 @@ harder to work with rather than easier.
 
 Not "the vendor-mode flag reads back as 1" — that is a write being accepted, which
 is not evidence. The observable would be the input stream changing shape: 32-byte
-`04 FE` frames appearing on the same characteristic, with bytes 4–6 varying when
-the controller is rotated and staying still when it is not. Anything less is
+`04 FE` frames appearing on the same characteristic, with some field inside them
+varying when the controller is rotated and staying still when it is not. The exact
+offset is not asserted here — the earlier "bytes 11–13" figure came from host-side
+analysis and has not been checked against the firmware builder. Anything less is
 unverified.
 
 ## What is still unknown
 
-- Whether this unit even has a gyro. The product is advertised with one; no
-  motion field has been observed on it in any capture.
 - Whether `05 EE 01` is accepted over Bluetooth at all — the flag has never been
   observed set on hardware.
+- The exact byte layout of the vendor frame. `FUN_0000094c` is the builder, but its
+  sensor fields were not decoded for this document, so the "gyro in bytes 11–13"
+  figure is host-side inference and remains unconfirmed.
 - Whether the vendor-mode frame is emitted on the same GATT characteristic as the
   DInput reports.
 - Whether `state+0xe == 2` (the 2.4 GHz branch that skips the check entirely)
   behaves differently, which the dongle path might answer more cheaply.
+- Whether this unit even has a gyro. The product is advertised with one; no motion
+  field has been observed on it in any capture.
