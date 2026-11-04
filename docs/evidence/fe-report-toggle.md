@@ -71,15 +71,38 @@ is pressed, the controller buzzes briefly.
 - Whether the same combo works while connected over Bluetooth (the handler is
   transport-independent, but that is reasoning, not an observation).
 
-## How to settle it
+## The key codes decode to the back buttons
 
-Two routes, cheapest first:
+The application's own key-index table in `LibCommon.Config/Constant.cs` groups the
+logical codes:
 
-1. **Read the key-code table.** The controller's own remap tables and the app's key
-   enumerations map logical codes to physical buttons; `0x12`–`0x18` are close
-   enough together to be an FN-layer row.
-2. **Try combos while capturing the raw stream.** With the controller wired, press
-   candidate three-key combos and watch for the report id changing to `0xFE`. The
-   rumble pulse marks a hit even without reading the stream.
+```csharp
+public static int[] CommonKey   = { 4, 5, 7, 8, 0, 2, 3, 1, 12, 13, 10, 11, 6, 9, 14, 15 };
+public static int[] FrontExtKey = { 16, 17 };
+public static int[] BackExtKey  = { 18, 19, 20, 21, 22, 23 };   /* 0x12–0x17 */
+public static int[] FuncKey     = { 24, 27, 28 };              /* 0x18, 0x1b, 0x1c */
+```
 
-Either way this is testable with no flashing.
+`BackExtKey` is **six consecutive codes, `0x12`–`0x17`** — these are the back
+buttons M1–M6. `FuncKey` holds `0x18`, `0x1b`, `0x1c`, one of which is FN.
+
+Substituting into the matchers:
+
+| Combo | Codes | Likely buttons | Effect |
+| --- | --- | --- | --- |
+| `FUN_0000b32c` | `0x18`, `0x12`, `0x13` | FN + M1 + M2 | **enable** report `0xFE` |
+| `FUN_0000b33c` | `0x18`, `0x14`, `0x15` | FN + M3 + M4 | **disable** report `0xFE` |
+
+So the toggle is a three-button chord on the controller's own back buttons. This is
+a prediction from static analysis, not an observation: it assumes `0x18` is FN and
+that `BackExtKey` order matches M1→M6, `0x12`→`0x17`.
+
+## How to confirm
+
+With the controller wired and the raw stream captured, hold **FN + M1 + M2**. Two
+independent signals mark a hit:
+
+1. the report id changes from `00`/`01` to **`0xFE`**, and
+2. the firmware fires `FUN_0000b62c(0x1e, 0xff, 0xff)` — a short, strong rumble.
+
+Then **FN + M3 + M4** should turn it back off.
