@@ -54,12 +54,47 @@ The whole firmware patch plan hinged on an untested assumption: that
   (`state+0x2a`) over the GATT link — everything downstream of that flag is
   already proven to work.
 
+## The extras are in the same report
+
+A 40-second capture in vendor mode with the owner pressing M1, M2, M3, M4, C, Z
+and finally A, three seconds apart, isolates the button field. Ignoring the noisy
+sensor bytes, the presses appear as **byte 7** taking one bit each, in the order
+they were pressed:
+
+| Time | Byte 7 | Physical button |
+| --- | --- | --- |
+| t+10.02 | `0x04` | M1 |
+| t+12.74 | `0x08` | M2 |
+| t+16.00 | `0x10` | M3 |
+| t+19.09 | `0x20` | M4 |
+| t+21.75 | `0x01` | C |
+| t+24.75 | `0x02` | Z |
+| t+27.07 | byte 9 = `0x10` | A (control) |
+
+The bit assignments match the standard DInput report exactly — extras at
+`0x01`–`0x20` for C, Z, M1–M4 — just relocated to byte 7. The control press
+appeared on byte 9 bit `0x10`, also as in DInput.
+
+So the vendor report carries **everything at once**: all buttons, the sticks, and
+live motion at 500 Hz.
+
+## This is the complete answer to the original goal
+
+DInput vendor mode is the only personality that provides both the extra buttons
+and the sensors. Switch mode gives motion but drops four buttons; plain DInput
+gives the buttons but no motion. The vendor report gives both.
+
+Nothing about the report format needs to be invented, patched or extended. The
+single missing piece is the flag that selects it, and that flag is already proven
+to work when set over USB.
+
 ## Not yet established
 
-- Whether the vendor report also carries M1–M4/C/Z. Earlier static analysis of
-  `FUN_0000094c` says it separates M1–M6 from the D-pad, and bytes 4–6 are the
-  sticks, so the buttons should be in the low bytes — but a press-by-press capture
-  is needed to confirm before relying on it.
+- The exact axis calibration and sign conventions, needed before any of this is
+  exposed to Steam.
+- Whether byte 5/6 and 26/27 (which moved with the triggers during the press
+  capture) are the trigger axes in this report; they are not needed for the button
+  or motion work.
 - Whether the same report is emitted over Bluetooth once the flag is set. The
   report builder and the BLE notification path are shared, but that is reasoning,
   not an observation.
