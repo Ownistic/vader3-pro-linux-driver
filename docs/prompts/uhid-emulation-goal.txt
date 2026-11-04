@@ -1,0 +1,29 @@
+Complete the UHID emulation change in vader3-pro-linux-driver without stopping until Steam Input exposes gyro, rumble and all 21 buttons from an emulated HID device, with evidence recorded and the existing uinput backend still working.
+
+OBJECTIVE AND WHY: Steam's Linux gyro support is bound to hidraw devices it already recognises (DualSense, DS4, Switch Pro); it ignores generic evdev axes, and our uinput pad uses ABS_RX/ABS_RY for the right stick, so there is no free axis group. Motion must arrive through an emulated HID device.
+
+READ FIRST: docs/HANDOFF.md; docs/evidence/static-subsystems-2026-11-04.md; driver/src/motion.rs; driver/src/pad.rs; driver/src/rumble.rs; driver/src/lib.rs.
+
+VERIFIED FACTS, do not re-derive: FUN_00010ba4 packs two 12-bit words into bytes 11-13 of a 20-byte notification, and motion.rs matches that disassembly bit-for-bit; the stream appears only after `AC 01` on NUS RX, and the device answers with an `AC C0` status whose byte 10 is the selector; bytes 14-17 hold a second gated pair of unknown meaning; axes, sign, scale, sample rate and any third component are unresolved, so do not call the values gyro.
+
+WORK ORDER:
+1. Spike first. Write a throwaway UHID probe under examples/ presenting a DualSense-like descriptor and report stream, then establish with the owner whether Steam detects it and offers gyro. If Steam ignores it, stop and report; do not build further.
+2. Determine whether the AC selector survives a power cycle. Ask the owner; it takes a minute and decides whether the daemon may write AC at all.
+3. Decode bytes 14-17 from the firmware only if a third component is actually needed. No guessing from captures.
+4. Implement behind `[pad] backend = "uhid"`, with current behaviour as the default.
+5. Feed motion into the emulated report and keep rumble working through that device's output reports.
+6. Measure input latency with the motion stream running, since roughly 134 notifications/s share the BLE link, against the recorded baseline of 130 reports/s and 0.03 ms median button latency.
+
+VALIDATION, each requiring observed evidence rather than assertion:
+- Steam lists the device as a supported controller and exposes gyro; owner-confirmed UI observation.
+- Owner confirms rumble through the standard path and that it stops on its own.
+- M1-M4 and C bind as separate controls; Z behaviour documented.
+- Suppression still works, and the daemon survives a reconnect without restarting.
+- cargo test passes; cargo clippy --all-targets is clean for src; cargo fmt --check passes; new tests fail against the old code.
+- README config keys, a new file under docs/evidence/, and docs/HANDOFF.md updated.
+
+DO NOT CHANGE: the uinput backend's behaviour, existing public config keys, or anything under local/research/. No firmware flashing, and never send `13 04 00 00` or `13 05`.
+
+OPERATING RULES: when the owner must act (reconnect, grant /dev access, press a control, confirm a felt result) stop and ask with the question tool. A successful write proves nothing; only an observed device response is evidence. Test one control at a time. English only. Do not copy vendor or decompiled code into the implementation. Work on branch feat/uhid-emulation.
+
+STOP WHEN every validation item is evidenced, the tree is clean and the commits are reviewable. Stop and report instead if the spike shows Steam ignores the emulated device, or if the same blocker recurs three times.

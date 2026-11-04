@@ -1,5 +1,12 @@
 # Gyro: why it is deferred, and where to resume
 
+> **Historical; partially superseded.** The tests described here cover specific
+> Bluetooth DInput reports and commands, not every possible motion route. The
+> assertion that all motion depends on `state+0x2a` is not established. See
+> [firmware follow-up](firmware-followup-2026-11-03.md) and
+> [static subsystem traces](static-subsystems-2026-11-04.md) for the corrected
+> serializer, sensor and calibration traces.
+
 Static analysis of firmware 6.7.5.1 (`Telink87_For_F3_Ver6.7.5.1.bin`, SHA-256
 `6cba3054…53e20a`). **No hardware was touched for this document.** It records why
 motion is out of scope for 1.0 and what the post-1.0 work should start from, so
@@ -117,6 +124,13 @@ firmware exposes no BLE route at all.
 ## Status: superseded
 
 **Switch mode solves this.** The controller's Nintendo Switch personality exposes
+
+> **Correction, 2026-11-04.** A separate Bluetooth motion path was found and
+> observed on hardware afterwards. It is not the HID report analysed below but a
+> Nordic UART notification stream, enabled by the `AC` command. Two packed 12-bit
+> values respond to rotation; axes, scale and a third component remain unresolved.
+> See [static-subsystems-2026-11-04.md](static-subsystems-2026-11-04.md).
+> Everything below about the `0xFE` HID report remains accurate.
 live gyro and accelerometer through the stock `hid-nintendo` driver over
 Bluetooth, plus rumble through the standard force-feedback API, on stock
 firmware with no command to send. See [switch-mode.md](switch-mode.md).

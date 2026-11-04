@@ -1,5 +1,16 @@
 # Bluetooth command reference for the Vader 3 Pro
 
+> **Follow-up:** [Firmware follow-up](firmware-followup-2026-11-03.md) traces
+> additional response builders and mode writes. In particular, `BA 40` and
+> `A5 01` construct replies, `12` shares the vendor RGB-test callee, and
+> `13 02` / `13 10` reach a flash-write-shaped path. These conclusions are
+> static and have not been verified on hardware.
+> The `13 04` description below overstates the register interpretation:
+> `0x308`, `4`, and `1` are helper arguments in the decompilation, not proven
+> register addresses. See [static subsystem traces](static-subsystems-2026-11-04.md).
+> The same follow-up describes additional 20-byte dispatcher branches and
+> potentially persistent `T` behavior.
+
 Consolidated from the firmware (6.7.5.1) and from captures of the mobile
 application and of the driver's own traffic. Every entry is marked either
 **verified on hardware** or **static only**.
@@ -15,7 +26,7 @@ bytes; no `05` prefix (that prefix is a USB-only framing byte).
 | --- | --- | --- |
 | 4 | six short handlers, then `FUN_0000b830` | the main command surface |
 | 20 | `FUN_000107a0` | checksummed opcodes `_ R S P Q T @ A U` |
-| < 5 | short handlers only | `A5` family and `AC` |
+| 1–3 | short handlers, then `FUN_0000b830` | handlers can read beyond the supplied payload; remaining buffer bytes are not characterized |
 | 5–19 | **nothing** | silently dropped |
 | > 20 | nothing | |
 
@@ -28,8 +39,8 @@ never reached any handler.
 
 | Command | Handler | Effect | Status |
 | --- | --- | --- | --- |
-| `10 <n> <b> <c>` | `FUN_0000cb94(n,b,c,5)` | remap table write, `n < 6` | static |
-| `11 <dur> <lo> <hi>` | `FUN_0000b62c(dur,lo,hi)` | rumble; levels clamp at 250 | **verified** |
+| `10 <n> <b> <c>` | `FUN_0000cb94(n,b,c,5)` | remap table write, `b < 6` | static |
+| `11 <left> <right> <dur>` | `FUN_0000b62c(dur,left,right)` | rumble; levels clamp at 250 | **verified** |
 | `12 <a> <b> <c>` | `FUN_0000ceb4(a,b,c)` | uncharacterised | static |
 | `13 02 ..` | `FUN_0000b4d4()` | uncharacterised | static |
 | `13 04 ..` | sets `state+0x9a = 1` | see the reset warning below | static |
@@ -71,7 +82,7 @@ Reached before the four-byte dispatcher, so these are matched on their own:
 | `A5 A0 00 00` | `FUN_00010604` | 13-byte status reply | **verified** |
 | `A5 A1 ..` | `FUN_0001067c` | 20-byte query reply | static |
 | `A5 01 ..` | `FUN_000105e8` | `FUN_000103e4(0)` | static |
-| `AC <flags>` | `FUN_00010560` | key/LED flag bits | static |
+| `AC <flags>` | `FUN_00010560` | bit 0 sets the motion-stream selector; bit 4 sets the adjacent byte; replies with an `AC C0` status object | **verified: enables a motion stream** |
 | `BA 40 ..` | `FUN_000105cc` | single call | static |
 
 ### The status reply is not battery
@@ -98,7 +109,8 @@ flag and is likewise only meaningful when the source is present.
 
 ## Twenty-byte checksummed opcodes
 
-`FUN_000107a0`, dispatched on the first byte, with a checksum in the last two bytes:
+`FUN_000107a0`, dispatched on the first byte after `FUN_00010980` verifies
+that byte 19 equals the sum of bytes 0–18 modulo 256:
 
 | Opcode | Handler | Effect |
 | --- | --- | --- |
@@ -117,7 +129,7 @@ table that `FUN_00010838` walks, so it is a partial remap, not a forwarder.
 
 ## What is still uncharacterised
 
-- `12`, `13 02`, `13 10`, and the `AC`/`BA`/`A5 01` handlers: reachable, effect
+- `12`, `13 02`, `13 10`, and the `BA`/`A5 01` handlers: reachable, effect
   unknown. These are the most likely place for dormant capabilities.
 - Whether `13 04 00 00` enters a bootloader or simply resets.
 - `state+0x9a`, the flag `13 04` sets in the other dispatcher.
