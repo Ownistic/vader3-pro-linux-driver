@@ -23,6 +23,7 @@ the report bytes.
 | `FUN_00018138` is **not** reachable from a Bluetooth GATT write | Firmware | Only producer of its queue is the USB validator |
 | The proven Bluetooth channel dispatches `FUN_0000b830`, which has no `0xEE` arm | Firmware | 4-byte payload path; arms are `0x10`–`0x13` only |
 | Vendor mode has been observed active on real hardware | **Never** | The `0x13 05` test disconnected the controller instead |
+| The vendor's own tool switches it over USB only | Windows app | `DInputDataManager : UsbDataManager`; no BLE data manager exists |
 
 The last row is the one that keeps this honest. Everything above it is code, and
 code is not behaviour.
@@ -82,6 +83,36 @@ That inventory is not what rules gyro out, though — the symbol sweep is. Every
 writer of `state+0x2a` in the image is one of the two `0xEE` arms, so no amount of
 work inside the reachable dispatch sets it unless a route to a `0xEE` arm exists.
 Inventoring the arms only confirms the sweep.
+
+## The vendor never does this over Bluetooth
+
+The Windows tool switches vendor mode, and it does so over the wire only. The
+chain is short and unambiguous:
+
+```csharp
+// FDGTransData.SetDataListening
+if (val2.ConnectMode.ToLower() == "dinput") {
+    byte[] cmd = DongleCommand.getSwitchOriginData(val.isListen);
+    DInputDataManager.GetCurrentInstance().SendByteArray(cmd);   // ← transport
+}
+```
+
+`DInputDataManager` is declared `class DInputDataManager : UsbDataManager`, and the
+assembly contains no BLE data manager of any kind — only `UsbDataManager`,
+`DInputDataManager`, `XInputDataManager` and `PS5DataManager`. The app also never
+references the vendor 128-bit service UUID (`00010203-0405-0607-0809-0a0b0c0d2b12`)
+anywhere in 720 decompiled files.
+
+So in the vendor's own implementation, "DInput" means *wired* DInput, and turning
+on the origin data that carries motion is a USB operation. That is consistent with
+the firmware result above: the two `0xEE` arms exist, but nothing on the GATT side
+feeds them.
+
+This reclassifies the problem. It is no longer "we have not found the BLE write
+path yet"; it is "the desktop tool does not use one, and the service it would have
+to use is referenced by no vendor code we have". The remaining explanations are
+that the mobile Flydigi app drives that vendor service over BLE, or that the
+firmware exposes no BLE route at all.
 
 ## Why the shake test settles less than it appears to
 
@@ -184,25 +215,23 @@ feature nobody has confirmed is even present on this model.
 
 ## Where the post-1.0 work should actually start
 
-Three approaches, in rough order of cost. The first is the only one that needs no
-new firmware knowledge.
+Three approaches, in rough order of cost. The first settles the question rather
+than advancing it, and costs nothing if an APK is already at hand.
 
-**1. Find whether any GATT write reaches `FUN_0001a148` or the `0x00845e14`
-queue.** This is the narrow version of "find the BLE stack", and it is the only
-static question left that can still make gyro work without new firmware. A 15+
-byte frame delivered to `FUN_0001a148` with selector 2 is sufficient — the `0xEE`
-arm is already there. The firmware's GATT database has a HID Report output
-characteristic (report reference ID 1 / OUTPUT) even though the report map
-declares no output report, and a vendor characteristic whose writes are followed
-by disconnects. Either could be the producer; the disconnect in particular is
-evidence that those writes reach firmware code rather than being discarded.
+**1. Analyse the mobile Flydigi app.** This is now the cheapest decisive step, and
+it replaces "find the BLE stack" as the recommendation. The vendor's desktop tool
+is USB-only for this feature, so if any vendor software enables origin mode over
+BLE it is the phone app, and it would have to write to the vendor service
+`00010203-…` that the desktop tool never touches. That answers the question by
+existence: either the app sends a vendor-mode frame over BLE — and its bytes give
+the channel and format directly — or no vendor software does, which makes this
+firmware-patch territory. Requires an APK; none is in `local/research/`.
 
-**2. Test whether the 20-byte path's checksum gate can carry `0xEF`-style
-commands.** `FUN_000107a0` handles nine opcodes but is reached only after the
-checksum passes, and only one 20-byte frame was ever tried (a `5A A5` envelope,
-which belongs to the outbound direction and was never going to work). A correctly
-checksummed frame aimed at `FUN_000107a0` has not been sent. Lower value for gyro,
-but cheap and untested.
+**2. Find whether any GATT write reaches `FUN_0001a148` or the `0x00845e14`
+queue.** Still the right static question, but lower priority than it was, and it
+now needs the Telink ATT table format to be resolved first. The firmware is
+stripped: no SDK version string survives (`Telink Remote` is the only identifiable
+name), so the ATT layer has to be recovered structurally.
 
 **3. Revisit `0x13 05` with recovery arranged.** Highest risk, and it should only
 be attempted once the first two are exhausted, since a bond reset makes the device
