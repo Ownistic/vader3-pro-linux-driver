@@ -76,6 +76,11 @@ A 60-second Bluetooth capture spanning a plain A press, stick movement, the chor
 and A plus stick again contains **289 reports, all report id `0x01` at 21 bytes**.
 The motion report was never emitted over Bluetooth.
 
+A second capture repeated the test in the explicit **disable-then-enable** order
+(FN+M3+M4, pause, FN+M1+M2, then stick), in case an already-set flag made the
+enable a no-op. Result identical: **275 reports, all `id=0x01`, all 21 bytes**.
+Order does not matter, and the Bluetooth stream never changes.
+
 So the chord sets the same flag the vendor command sets, and the flag changes the
 report the firmware builds — but the **Bluetooth notification path still sends the
 ordinary 21-byte report**. `FUN_00011c44` writes `0xFE` into a report buffer that
