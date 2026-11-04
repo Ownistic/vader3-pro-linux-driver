@@ -7,6 +7,9 @@
 > migration path until version 1.0. Steam recognition of the six extra buttons is
 > not yet verified; see [Status](#status). Expect rough edges and treat every
 > version before 1.0 as a preview.
+>
+> The optional UHID Edge backend and its motion stream are experimental; the
+> historical uinput results below do not establish their hardware or Steam behavior.
 
 Makes a **Flydigi Vader 3 Pro connected over Bluetooth** work as a complete
 controller in **Steam Input** on Linux — including the six extra buttons (M1, M2,
@@ -246,6 +249,42 @@ either way, so a missing mapping costs the extras and nothing else.
 
 ---
 
+## Experimental UHID Edge backend
+
+**Not ready for normal use:** the synthetic compatibility probe passed in Steam,
+but the first integrated hardware run repeatedly failed its AC selector write
+and delivered no motion notifications. Testing stopped at the owner's retry
+limit; the existing uinput service was restored. Rumble, extra bindings,
+reconnect and motion-active latency remain unvalidated for this backend. See
+[the implementation evidence](docs/evidence/uhid-emulation-2026-11-04.md).
+
+The default remains uinput. To opt in, grant the daemon read/write access to
+`/dev/uhid` and ensure Linux `hid-playstation` is available. Configure, for example:
+
+```toml
+bluetooth_address = "AA:BB:CC:DD:EE:FF" # required for UHID rumble or motion
+rumble = true
+
+[pad]
+backend = "uhid" # default: "uinput"
+
+[motion]
+enabled = true # default: false; sends an experimental motion selector
+scale = 1      # signed i16 multiplier, nonzero when enabled
+stale_ms = 100 # 1..=1000; old samples become zero
+```
+
+With both rumble and motion disabled, UHID needs no Bluetooth address or BLE
+worker. Motion is not subscribed to or enabled unless explicitly requested.
+The Edge report maps M1–M4 to four Edge controls, C to touchpad click, and Z to
+mic; their behavior in Steam remains unverified. Motion is **not calibrated**:
+the first raw value is provisionally X, the second Y, and the third is zero.
+Acceleration is fabricated, not measured. Scale and axis meanings need hardware
+validation. A selector write alone does not prove that the controller enabled it;
+the log reports observed selector status and notification counts separately.
+
+---
+
 ## Run
 
 Connect the controller in **Bluetooth DInput mode**, then:
@@ -464,6 +503,9 @@ Idle CPU cost is 0.6% of one core.
   code paths, the reason each route fails, and where the work should resume.
   Do not retry the `0x13` path without a pairing-recovery plan — it once reset this
   controller's Bluetooth bond.
+  The separate experimental UHID motion option above does not establish a
+  calibrated or validated native gyro and supersedes this historical deferral
+  only as an experimental path.
 - **Five of the six extras are bindable in Steam; Z is not.** Verified on the target:
   C and M1–M4 bind as `misc1` and `paddle1`–`paddle4`, but Z occupies `touchpad`,
   the one name SDL2 offers that Steam ignores on a generic device. SDL2's evdev
@@ -521,6 +563,8 @@ rather than taken on trust:
 > document why the virtual pad uses `uinput` rather than `uhid`: all three UHID
 > descriptor variants produced `capabilities/ff = 0`, so Steam could not have
 > rumbled the pad at all.
+> This is the historical generic-descriptor result, not a validation of the
+> newer experimental Edge backend.
 
 ---
 

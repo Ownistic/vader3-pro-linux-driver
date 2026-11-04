@@ -52,9 +52,79 @@ ask the owner to grant access; do not run sudo or change ACLs automatically.
 
 ## Status and limitations
 
-No probe or hardware test was run as part of this implementation. Kernel
-binding, Edge support on the installed kernel, Steam recognition, sensor
-delivery, and any effect of fabricated gyro remain unverified. No real input,
+### First host run — 2026-11-04
+
+Tested revision: `ab522e8` on `feat/uhid-emulation`, clean tree at launch.
+Artifact: `driver/target/debug/examples/uhid_dualsense_probe`, built by:
+
+```sh
+cargo run --manifest-path driver/Cargo.toml --example uhid_dualsense_probe -- --synthetic-gyro --seconds 1200
+```
+
+`cargo test --example uhid_dualsense_probe`: 3 passed. The existing driver
+baseline `cargo test` passed 109 tests before the spike was added. Kernel:
+`7.3.1-1-cachyos`.
+
+A read-only sysfs inspection while the probe was running observed:
+
+```text
+HID: 0003:054C:0DF2.002A
+driver: playstation
+hidraw: /dev/hidraw10 readable: True writable: True
+input60 Virtual DualSense Edge probe Touchpad
+input59 Virtual DualSense Edge probe Motion Sensors
+input61 Virtual DualSense Edge probe Headset Jack
+input58 Virtual DualSense Edge probe
+```
+
+This establishes host kernel binding and node creation, not Steam support or
+physical sensor delivery. Owner-confirmed Steam recognition and gyro UI are
+pending. The process has a 1,200-second lifetime; it must be running during
+the UI observation. No physical controller command was sent.
+
+Steam recognition, sensor delivery, and any effect of fabricated gyro remain
+unverified. No real input,
 button mapping, paddles, rumble, lightbar, USB transport, Bluetooth, or
 production daemon changes are implemented. This identity may collide with a
 real device or another instance; the synthetic MAC is not unique per process.
+
+### Legion Go / Bazzite host run — 2026-11-04
+
+The owner clarified that Steam is installed on the Legion Go, not the initial
+development host. The local probe exited normally after its bounded lifetime.
+The remote host is accessed as `ssh legion`, account `deck`, kernel
+`7.2.11-ogc4.1.fc44.x86_64`, x86-64, glibc 2.43. The account already had
+read/write access to `/dev/uhid`; no permissions or installed services changed.
+
+Copied the standalone binary, its source and this note to
+`/tmp/flydigi-uhid-spike-ab522e8/`. The binary and source match revision
+`ab522e8`; only evidence/progress documents changed locally after that commit.
+SHA-256 verified on both hosts:
+
+```text
+a7be75374361ca87036bc1cfa2552f15abcbac81135433bc145bbbe4ad856fb7  uhid_dualsense_probe
+a923e3cf4ba0316b96713ac98dace062afea3313ae74e50eeebffcc6cfe7cf9a  uhid_dualsense_probe.rs
+```
+
+Remote command (through SSH):
+
+```sh
+/tmp/flydigi-uhid-spike-ab522e8/uhid_dualsense_probe --synthetic-gyro --seconds 1200 > /tmp/flydigi-uhid-spike-ab522e8/run.log 2>&1
+```
+
+Read-only remote inspection observed HID `0003:054C:0DF2.0014` bound to
+`playstation`, readable/writable `/dev/hidraw9`, gamepad `input86`, Motion
+Sensors `input87`, Touchpad `input88`, and Headset Jack `input89`.
+The log records `UHID START flags=0x7`, `UHID OPEN`, answered GET feature
+requests for 09/20/05, and host output reports of 63 and 48 bytes. These are
+observed host interactions, not proof that Steam exposes gyro or that any
+physical motor moved. No physical device is read or written by the probe.
+The owner then confirmed **"Recognized; gyro available"** in response to the
+Legion Go Steam UI check: Steam recognizes the emulated supported controller
+and exposes gyro configuration. This passes the spike gate, not physical
+motion/rumble/button validation. The synthetic probe was stopped with SIGTERM;
+its SSH task exited 0 and a subsequent sysfs inspection found no Edge probe.
+
+Next gate: AC persistence across a physical power cycle. A remote inspection
+found no `d7d7:0041` HID node; physical Bluetooth DInput connection on the
+Legion Go must be established with the owner before continuing.

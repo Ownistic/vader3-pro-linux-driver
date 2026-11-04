@@ -1,5 +1,71 @@
 # Progress
 
+## UHID work stopped at repeated-blocker limit
+
+The optional backend is saved but **not validated or ready for deployment**.
+The first integrated Legion Go run repeatedly failed its AC selector write;
+the first inspected journal already exceeded the owner's three-recurrence
+limit. No further experiment or repair was attempted. The transient test was
+stopped, its Edge HID removed, and the unchanged installed uinput service
+restored active/running (PID 51748). The captured journal counted 37 automatic
+retries before shutdown; no selector status or motion notification was observed.
+The underlying D-Bus error was not retained, so its cause remains unknown.
+
+Tested release binary SHA-256:
+`e986bc4014f3cefcba2cd643f87740179a1a0ccdf54b40e69ee35b6cff472fb0`.
+Source-manifest SHA-256:
+`517bc645e211498d4740eb3af347d678ebfd34388160ae66834bcc2346e232a8`.
+`cargo test`: 129 passed; `cargo clippy --all-targets`: no errors, twelve
+existing example warnings, none in src; `cargo fmt --check` and release build
+passed. Read-only review allowed a first controlled run, not final acceptance.
+No old-code regression demonstration or final independent verifier ran.
+
+All final hardware checks (rumble/stop, M1–M4/C bindings, Z behavior,
+suppression/reconnect, motion-active latency) remain open. Full details and
+the exact next action requiring renewed authority are in
+`docs/evidence/uhid-emulation-2026-11-04.md`. Earlier next-action checkpoints
+below are historical and do not authorize continuing past the stop condition.
+
+## UHID emulation gate (2026-11-04)
+
+- Active branch: `feat/uhid-emulation`; research checkpoint `0a9e333`, isolated
+  spike and decoder checkpoint `ab522e8`. The commit agent packaged the prior
+  uncommitted research at the owner's request; the tree was clean at launch.
+- Saved spike: `driver/examples/uhid_dualsense_probe.rs`; evidence:
+  `docs/evidence/uhid-dualsense-probe.md`. Existing daemon/uinput behavior is
+  unchanged. No files under `local/research/` were changed.
+- Baseline: `cargo test` 109 passed. Spike-specific tests: 3 passed.
+  AFT could not provide Rust diagnostics because rust-analyzer is unavailable.
+- Probe launched from `ab522e8` with synthetic motion and a 1,200-second
+  lifetime. Kernel `7.3.1-1-cachyos` bound `playstation`, created a readable and
+  writable hidraw node plus gamepad, motion, touchpad and headset input nodes.
+  This is kernel evidence only, not Steam or physical motion evidence.
+- Next action: owner inspects Steam for the emulated DualSense Edge and gyro
+  options while the probe runs. Do not integrate the backend before this gate.
+  AC persistence, physical rumble, buttons, suppression/reconnect and latency
+  remain untested for UHID. No AC command was sent by the spike.
+- Host correction: Steam is on the owner's Legion Go, accessible using
+  `ssh legion`. The local probe finished normally. The same hash-verified
+  binary from `ab522e8` is now running for 1,200 seconds from remote
+  `/tmp/flydigi-uhid-spike-ab522e8/`; the installed driver is untouched.
+  Bazzite kernel `7.2.11-ogc4.1.fc44.x86_64` bound `playstation`, exposed
+  hidraw/gamepad/motion nodes and delivered feature requests and output
+  reports. Owner Steam UI observation is still required before integration.
+- The owner subsequently confirmed **Recognized; gyro available** on the
+  Legion Go. Spike gate passed for `ab522e8`. The synthetic probe was stopped,
+  exited 0, and its HID node was observed removed. Next: AC persistence check.
+  No physical `d7d7:0041` node was found on the Legion Go at this point; ask
+  the owner to establish Bluetooth DInput there before the passive baseline.
+- Owner connected the physical controller on the Legion Go without a power
+  cycle. The diagnostic observed 2,002 candidate notifications in 15 seconds.
+  After an owner-confirmed full power cycle/reconnect, the same subscription
+  observed zero. Explicit AC 01 then produced AC C0 selector 1 and 1,531 data
+  notifications. The enabled stream did not survive that cycle; exact selector
+  value while off and broader persistence remain unproven. Artifact hashes,
+  commands and acceptance matrix: `docs/evidence/uhid-emulation-2026-11-04.md`.
+  Next: implement the explicitly opt-in backend; default uinput must never
+  subscribe to motion or send AC. The stream is currently enabled.
+
 ## Experimental Bluetooth motion implementation (in progress)
 
 The owner requested an opt-in Steam-motion prototype on 2026-11-04. The

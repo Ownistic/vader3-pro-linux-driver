@@ -18,9 +18,12 @@
 //! See `docs/ARCHITECTURE.md` for the decisions and `docs/PROTOCOL.md` for the
 //! protocol evidence.
 
+pub mod ble_worker;
 pub mod config;
 pub mod descriptor;
 pub mod device;
+pub mod edge;
+pub mod edge_report;
 pub mod encode;
 pub mod ff;
 pub mod input;
@@ -29,6 +32,7 @@ pub mod pad;
 pub mod rumble;
 pub mod suppress;
 pub mod uhid;
+pub mod uhid_runtime;
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -503,8 +507,6 @@ impl Translator {
 /// Entry point used by `main`.
 pub fn run(config_path: Option<&Path>) -> Result<()> {
     let cfg = Config::load_or_default(config_path)?;
-    let mut translator = Translator::start(cfg)?;
-
     RUNNING.store(true, std::sync::atomic::Ordering::SeqCst);
     // SAFETY: the handler only stores to an atomic, which is async-signal-safe.
     unsafe {
@@ -520,7 +522,11 @@ pub fn run(config_path: Option<&Path>) -> Result<()> {
 
     // The loop runs `while !should_stop()`, so the closure must report
     // "stop" by returning true.
-    translator.run(|| !RUNNING.load(std::sync::atomic::Ordering::SeqCst))
+    let should_stop = || !RUNNING.load(std::sync::atomic::Ordering::SeqCst);
+    match cfg.pad.backend {
+        config::Backend::Uinput => Translator::start(cfg)?.run(should_stop),
+        config::Backend::Uhid => uhid_runtime::EdgeRuntime::start(cfg)?.run(should_stop),
+    }
 }
 
 /// Render a state as pressed control names, for debugging and acceptance

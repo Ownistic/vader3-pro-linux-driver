@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::device;
@@ -38,6 +38,40 @@ pub struct Config {
     pub suppress_physical: bool,
     /// Log level: `error`, `warn`, `info`, `debug` or `trace`.
     pub log_level: String,
+    pub pad: PadConfig,
+    pub motion: MotionConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Backend {
+    #[default]
+    Uinput,
+    Uhid,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PadConfig {
+    pub backend: Backend,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MotionConfig {
+    pub enabled: bool,
+    pub scale: i16,
+    pub stale_ms: u64,
+}
+
+impl Default for MotionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            scale: 1,
+            stale_ms: 100,
+        }
+    }
 }
 
 impl Default for Config {
@@ -51,6 +85,8 @@ impl Default for Config {
             suppress_physical: true,
             poll_ms: 4,
             log_level: "info".to_string(),
+            pad: PadConfig::default(),
+            motion: MotionConfig::default(),
         }
     }
 }
@@ -60,7 +96,36 @@ impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let text =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+        let cfg: Self =
+            toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Check cross-field constraints before opening devices or starting workers.
+    pub fn validate(&self) -> Result<()> {
+        if !(1..=1000).contains(&self.motion.stale_ms) {
+            bail!("motion.stale_ms must be in 1..=1000");
+        }
+        if self.motion.enabled && self.motion.scale == 0 {
+            bail!("motion.scale must be nonzero when motion is enabled");
+        }
+        if self.motion.enabled && self.pad.backend != Backend::Uhid {
+            bail!("motion requires the uhid backend");
+        }
+        if self.pad.backend == Backend::Uhid && (self.rumble || self.motion.enabled) {
+            let valid = self.bluetooth_address.as_deref().is_some_and(|addr| {
+                let parts: Vec<_> = addr.split(':').collect();
+                parts.len() == 6
+                    && parts
+                        .iter()
+                        .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
+            });
+            if !valid {
+                bail!("uhid motion or rumble requires a valid bluetooth_address");
+            }
+        }
+        Ok(())
     }
 
     /// Load the given path if it exists, else return defaults.
@@ -69,7 +134,9 @@ impl Config {
     /// to defaults. Without this, a config written where the documentation says to
     /// put it would be silently ignored and rumble would quietly stay off.
     pub fn load_or_default(path: Option<&Path>) -> Result<Self> {
-        Self::load_resolved(path, &Self::default_path())
+        let cfg = Self::load_resolved(path, &Self::default_path())?;
+        cfg.validate()?;
+        Ok(cfg)
     }
 
     fn load_resolved(explicit: Option<&Path>, default: &Path) -> Result<Self> {
@@ -102,6 +169,47 @@ mod tests {
         assert_eq!(c.vendor_id, 0xd7d7);
         assert_eq!(c.product_id, 0x0041);
         assert!(c.rumble);
+        assert_eq!(c.pad.backend, Backend::Uinput);
+        assert!(!c.motion.enabled);
+        assert_eq!((c.motion.scale, c.motion.stale_ms), (1, 100));
+        c.validate().unwrap();
+    }
+
+    #[test]
+    fn backend_and_motion_validation() {
+        assert!(toml::from_str::<Config>("[pad]\nbackend = 'unknown'").is_err());
+        let mut c: Config =
+            toml::from_str("rumble = false\npoll_ms = 8\n[motion]\nenabled = true").unwrap();
+        assert_eq!(c.poll_ms, 8);
+        assert!(!c.rumble);
+        assert!(c.validate().is_err());
+        c.pad.backend = Backend::Uhid;
+        assert!(c.validate().is_err());
+        c.bluetooth_address = Some("AA:BB:CC:DD:EE:FF".into());
+        assert!(c.validate().is_ok());
+        c.motion.scale = 0;
+        assert!(c.validate().is_err());
+        c.motion.scale = -1;
+        for value in [0, 1001] {
+            c.motion.stale_ms = value;
+            assert!(c.validate().is_err());
+        }
+        for value in [1, 1000] {
+            c.motion.stale_ms = value;
+            assert!(c.validate().is_ok());
+        }
+        c.bluetooth_address = Some("AA:BB:CC:DD:EE:GG".into());
+        assert!(c.validate().is_err());
+        c.motion.enabled = false;
+        c.rumble = false;
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn load_rejects_invalid_cross_field_configuration() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), "[motion]\nenabled = true\n").unwrap();
+        assert!(Config::load(file.path()).is_err());
     }
 
     #[test]

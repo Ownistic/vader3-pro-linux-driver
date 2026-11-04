@@ -170,6 +170,15 @@ impl PhysicalDevice {
     /// wakes the moment a report arrives, so the timeout only bounds how often
     /// the caller re-checks its own housekeeping.
     pub fn wait_readable(&self, timeout: Duration) -> Result<bool> {
+        self.poll_readable(timeout, false)
+    }
+
+    /// Like `wait_readable`, but treat poll hangups as link loss.
+    pub fn wait_readable_checked(&self, timeout: Duration) -> Result<bool> {
+        self.poll_readable(timeout, true)
+    }
+
+    fn poll_readable(&self, timeout: Duration, check_link: bool) -> Result<bool> {
         let mut fd = libc::pollfd {
             fd: std::os::unix::io::AsRawFd::as_raw_fd(&self.file),
             events: libc::POLLIN,
@@ -177,13 +186,27 @@ impl PhysicalDevice {
         };
         let millis = timeout.as_millis().min(i32::MAX as u128) as i32;
         // SAFETY: `fd` is a single initialised pollfd describing an open fd.
-        let rc = unsafe { libc::poll(&mut fd, 1, millis) };
+        let rc = if check_link {
+            let precise = libc::timespec {
+                tv_sec: timeout.as_secs().min(i64::MAX as u64) as libc::time_t,
+                tv_nsec: libc::c_long::from(timeout.subsec_nanos()),
+            };
+            // SAFETY: ppoll reads one initialized pollfd and a valid timespec;
+            // the null signal mask leaves the caller's mask unchanged.
+            unsafe { libc::ppoll(&mut fd, 1, &precise, std::ptr::null()) }
+        } else {
+            // Preserve historical millisecond polling for the uinput backend.
+            unsafe { libc::poll(&mut fd, 1, millis) }
+        };
         if rc < 0 {
             let err = std::io::Error::last_os_error();
             if err.kind() == ErrorKind::Interrupted {
                 return Ok(false);
             }
             return Err(err).with_context(|| format!("poll on {}", self.path.display()));
+        }
+        if check_link && fd.revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0 {
+            anyhow::bail!("physical device poll error on {}", self.path.display());
         }
         Ok(rc > 0)
     }

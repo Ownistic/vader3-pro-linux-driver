@@ -1,5 +1,46 @@
 # Handoff — 2026-11-03
 
+## Latest: integrated UHID run stopped at retry limit
+
+The optional backend is saved but **not a validated working motion feature**.
+First integrated test on the Legion Go repeatedly failed the worker's AC
+selector write, with no observed status/data. More than three consecutive
+failures were visible, reaching the owner's stop condition. No further repair
+or experiment was attempted. The transient test was stopped and its HID
+removed; the unchanged installed uinput service was restored active/running.
+
+129 Rust tests passed, all-target clippy has no errors or src warnings (twelve
+existing example warnings), formatting and release build passed. Exact tested
+source/binary hashes, review scope, complete failure/restoration evidence and
+remaining acceptance items: [UHID implementation evidence](evidence/uhid-emulation-2026-11-04.md).
+The worker logger omitted the D-Bus error reason. Resuming requires renewed
+authority beyond the retry limit; first preserve that error and compare the
+Rust request with the successful Python diagnostic. Do not mistake the passed
+synthetic Steam gate below for final integrated hardware acceptance.
+
+## UHID spike checkpoint — 2026-11-04
+
+Active branch: `feat/uhid-emulation`. The commit agent saved prior research as
+`0a9e333` and the motion decoder plus isolated synthetic UHID spike as
+`ab522e8`. The existing daemon and uinput backend are unchanged. Baseline
+`cargo test`: 109 passed; spike-specific example tests: 3 passed.
+
+Steam is installed on the owner's Legion Go / Bazzite, reached by `ssh legion`
+(account `deck`), not the development host. The hash-verified spike from
+`ab522e8` ran there, bound `playstation`, and the owner confirmed Steam
+recognizes it and offers gyro. This passes the initial compatibility gate,
+not physical motion, rumble, extra-button or latency validation. The probe
+has been stopped. Exact artifact hashes, host evidence and limitations:
+[UHID spike evidence](evidence/uhid-dualsense-probe.md).
+
+Next: establish whether the AC-enabled stream survives a controller power
+cycle before permitting daemon AC writes. No `d7d7:0041` node was found on
+the Legion Go after the spike; owner action is needed to connect Bluetooth
+DInput there before the passive baseline. No AC command has been sent by
+this work. Production integration, all hardware validations, regression
+checks and final independent gates remain pending. Do not change
+`local/research/` or send `13 04 00 00` / `13 05`.
+
 **Current research index:** [research-index.md](evidence/research-index.md).
 The 2026-11-04 static pass adds an analog calibration trace, Android OTA
 evidence, and corrections to bootloader and LED persistence claims. Research is
