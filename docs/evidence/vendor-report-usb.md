@@ -111,6 +111,28 @@ Three fields idle near 122–125 and several idle at 0, so the sticks and trigge
 are mixed in these bytes without a clean split. **No decode code is written
 against this**, because a wrong guess would produce plausible nonsense.
 
+A second attempt with four timed phases produced a further complication: bytes
+4, 5, 6, 18, 20, 26 and 27 sweep `0`–`255` continuously **whenever the controller
+is held**, and are exactly `0` across a 24-second untouched capture. They are
+therefore not steady axes — they respond to the controller being moved at all,
+which is consistent with tilt or acceleration rather than stick position.
+
+Only these showed phase-specific behaviour in the timed capture:
+
+| Window | Bytes active |
+| --- | --- |
+| 10–20 s | `b19` |
+| 20–25 s | `b21`, `b22` |
+| 25–30 s | `b23`, `b24` |
+
+The association between those windows and the intended controls was not
+established, because the always-moving bytes above contaminated the windows.
+
+**Conclusion: the axis layout needs the firmware builder, not more captures.**
+`FUN_0000094c` writes the report field by field, so its store offsets are
+authoritative and avoid this ambiguity entirely. That is the next step if the
+host-side parser is resumed.
+
 What is needed: one capture per control, isolated — left stick alone, right stick
 alone, LT alone, RT alone — with the controller at rest before each. That is a
 few minutes and it removes the ambiguity entirely.
