@@ -124,7 +124,8 @@ remaining fields are not established, and the bootloader may check any of them.
 
 | Risk | Assessment |
 | --- | --- |
-| Bootloader verifies a signature | **Unknown.** Would end the project without FlyDigi's key |
+| Bootloader verifies a signature | **Unknown, but unlikely.** The image contains no signature-sized incompressible block (0 regions at 128- and 256-byte windows), and the updater sends only length + CRC32. See [bootloader-verification.md](bootloader-verification.md) |
+| Recovery if a flash fails | **None confirmed.** No read command, no separate boot-mode device for this model, no SWD/UART pads |
 | Bootloader rejects a modified image | Possible even with a valid CRC |
 | Bricking | No SWD/UART pads identified; recovery likely needs opening the shell |
 | Side effects of `0x13 05 01` | **Observed once**: the controller disconnected and the bond was lost on this unit |
