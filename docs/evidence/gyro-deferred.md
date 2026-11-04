@@ -74,7 +74,7 @@ it. `FUN_00010980` branches on length alone:
 
 | Length | Route |
 | --- | --- |
-| `< 5` | six handlers (`FUN_00010604`, `0x1067c`, `0x10560`, `0x105cc`, `0x105e8`, `0x105a4`), then `FUN_0000b830(buf, 4)` |
+| `< 5` | six handlers, then `FUN_0000b830(buf, 4)`. These are the **mobile app's command set**: `0xAC`→`FUN_00010560`, `0xBA 0x40`→`FUN_000105cc`, `0xA5 0x01`→`FUN_000105e8`, `0xA5 0xA0`→`FUN_00010604`; see [mobile-app-ble-protocol.md](mobile-app-ble-protocol.md) |
 | `5`–`19` | **nothing** |
 | `== 20` | additive checksum over bytes 0–18, then `FUN_000107a0` and `FUN_00010530` |
 | other | nothing |
@@ -232,6 +232,13 @@ queue.** Still the right static question, but lower priority than it was, and it
 now needs the Telink ATT table format to be resolved first. The firmware is
 stripped: no SDK version string survives (`Telink Remote` is the only identifiable
 name), so the ATT layer has to be recovered structurally.
+
+**2b. Log into the app and open `Config management`.** The mobile BLE channel is
+now fully characterised ([mobile-app-ble-protocol.md](mobile-app-ble-protocol.md)):
+the app drives the controller over NUS with `A5`/`AC`/`BA` frames, and four of
+those map to known firmware handlers. The one screen that was never reached is
+where motion is enabled, and it needs a Flydigi account. Capturing that screen is
+the cheapest remaining route to the missing command.
 
 **3. Revisit `0x13 05` with recovery arranged.** Highest risk, and it should only
 be attempted once the first two are exhausted, since a bond reset makes the device
