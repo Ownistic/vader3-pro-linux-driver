@@ -51,6 +51,12 @@ copies (`state+0x90`, `state+0x92`) belong to `FUN_0000a598`, which is a
 source is identified, "the vendor report carries gyro" is an assumption inherited
 from host-side inference.
 
+> **RESOLVED.** Hardware testing over USB shows the vendor report at 500 Hz with
+> fields that are flat when still (spreads of 14–80 counts) and swing by
+> thousands when rotated. Vendor mode therefore carries live motion, and the
+> sample-source question no longer blocks the plan. See
+> [vendor-report-usb.md](vendor-report-usb.md).
+
 Before any patch, that assumption must be tested — see *Recommended order*.
 
 ### Option B — add the extra buttons to Switch mode
