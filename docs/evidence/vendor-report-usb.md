@@ -88,6 +88,33 @@ Nothing about the report format needs to be invented, patched or extended. The
 single missing piece is the flag that selects it, and that flag is already proven
 to work when set over USB.
 
+## Axis layout: not yet resolved
+
+A combined capture (left stick, right stick, LT, RT, D-pad) showed several
+axis-like fields but could not attribute them individually, because the controls
+overlapped in time and the run began with the controller already moving.
+Measured against a true still baseline from a separate capture:
+
+| Byte | Still | Range seen | Note |
+| --- | --- | --- | --- |
+| 4 | 0 | 0–255 (44 values) | **always identical to byte 18** |
+| 18 | 0 | 0–255 (44 values) | duplicate of byte 4 |
+| 5 | 0 | 0–255 (32) | |
+| 6 | 0 | 0–255 (9) | |
+| 19 | 125 | 0–255 (183) | sweeps full range |
+| 21 | 123 | 0–255 (192) | idles near 123 |
+| 22 | 122 | 0–255 (211) | idles near 122 |
+| 23 | 0 | 0–255 (40) | |
+| 24 | 0 | 0–255 (52) | |
+
+Three fields idle near 122–125 and several idle at 0, so the sticks and triggers
+are mixed in these bytes without a clean split. **No decode code is written
+against this**, because a wrong guess would produce plausible nonsense.
+
+What is needed: one capture per control, isolated — left stick alone, right stick
+alone, LT alone, RT alone — with the controller at rest before each. That is a
+few minutes and it removes the ambiguity entirely.
+
 ## Not yet established
 
 - The exact axis calibration and sign conventions, needed before any of this is
