@@ -24,6 +24,7 @@ pub mod device;
 pub mod encode;
 pub mod ff;
 pub mod input;
+pub mod motion;
 pub mod pad;
 pub mod rumble;
 pub mod suppress;
