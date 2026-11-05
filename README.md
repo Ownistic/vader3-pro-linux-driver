@@ -113,8 +113,9 @@ getfacl /dev/uhid /dev/hidrawN /dev/input/eventN
 
 `/dev/uhid` access lets a user create virtual HID devices, so grant it only to
 trusted users. Device nodes can change after reconnect; verify them and reapply
-temporary ACLs as needed. For persistent access, ask an administrator to
-configure narrowly scoped rules that follow local security policy.
+temporary ACLs as needed. For the Bazzite access rule observed on my Legion Go
+and an example for other distributions, see the
+[device access guide](docs/device-access.md).
 
 ### Configure and run
 

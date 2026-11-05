@@ -11,7 +11,7 @@ class DocumentationTests(unittest.TestCase):
         for name in (
             "README.md", "ARCHITECTURE.md", "VADER3P_PROTOCOL.md",
             "docs/TESTING.md", "docs/steam-controller-visibility.md",
-            "docs/uhid-migration.md", "driver/README.md",
+            "docs/uhid-migration.md", "docs/device-access.md", "driver/README.md",
         ):
             with self.subTest(name=name):
                 self.assertTrue((ROOT / name).is_file())
@@ -37,6 +37,19 @@ class DocumentationTests(unittest.TestCase):
         for path in paths:
             with self.subTest(document=str(path.relative_to(ROOT))):
                 self.assertIsNone(internal.search(path.read_text()))
+
+    def test_device_access_guide_scopes_rules_and_validation(self):
+        guide = (ROOT / "docs/device-access.md").read_text()
+        self.assertIn("60-sunshine-ublue.rules", guide)
+        self.assertIn("not a guarantee for every Bazzite", guide)
+        self.assertIn('SUBSYSTEM=="misc", KERNEL=="uhid", TAG+="uaccess"', guide)
+        self.assertIn('KERNELS=="0005:04B4:2412.*"', guide)
+        self.assertIn('KERNEL=="event*"', guide)
+        self.assertIn("not one Bluetooth address", guide)
+        self.assertIn("read/write access, including to evdev nodes", guide)
+        self.assertIn("test -r /dev/uhid && test -w /dev/uhid", guide)
+        self.assertIn("does not prove controller or", guide)
+        self.assertIn("docs/device-access.md", (ROOT / "README.md").read_text())
 
     def test_local_markdown_links_resolve(self):
         paths = list(ROOT.glob("*.md")) + list((ROOT / "docs").rglob("*.md"))
