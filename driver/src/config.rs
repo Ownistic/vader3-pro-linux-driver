@@ -20,6 +20,8 @@ pub struct Config {
     pub virtual_name: String,
     /// Enable rumble forwarding from host feedback to the controller.
     pub rumble: bool,
+    /// Forward host lightbar colors to the physical controller.
+    pub led: bool,
     /// Optional Bluetooth address filter; absent means all eligible controllers.
     pub bluetooth_address: Option<String>,
     /// Compatibility-only setting; the UHID runtime does not use this value.
@@ -93,6 +95,7 @@ impl Default for Config {
             product_id: device::PRODUCT_ID,
             virtual_name: "Flydigi Vader 3 Pro (UHID DualSense Edge)".to_string(),
             rumble: true,
+            led: true,
             bluetooth_address: None,
             suppress_physical: true,
             poll_ms: 4,

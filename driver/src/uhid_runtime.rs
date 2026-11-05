@@ -22,7 +22,7 @@ const REPORT_INTERVAL: Duration = Duration::from_millis(4);
 const MAX_PHYSICAL_REPORTS_PER_TICK: usize = 64;
 
 fn worker_needed(cfg: &Config) -> bool {
-    cfg.motion.enabled || cfg.rumble
+    cfg.motion.enabled || cfg.rumble || cfg.led
 }
 
 fn feedback_allowed(connected: bool, rumble: bool) -> bool {
@@ -75,7 +75,11 @@ mod tests {
         let mut cfg = Config::default();
         assert!(worker_needed(&cfg));
         cfg.rumble = false;
+        cfg.led = false;
         assert!(!worker_needed(&cfg));
+        cfg.led = true;
+        assert!(worker_needed(&cfg));
+        cfg.led = false;
         cfg.motion.enabled = true;
         assert!(worker_needed(&cfg));
     }

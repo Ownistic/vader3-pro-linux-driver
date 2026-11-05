@@ -13,6 +13,8 @@ Linux UHID and `hid-playstation`. USB and the 2.4 GHz dongle are not supported.
 - FN opens Steam's Quick Access Menu (the sidebar containing Decky) using an
   ordered Guide + A pulse.
 - Rumble feedback forwarded over Bluetooth.
+- Experimental Steam lightbar colors forwarded over Bluetooth. I observed the
+  physical LEDs follow Steam color changes on my Legion Go.
 - Experimental two-axis gyro input for pitch and yaw, disabled by default.
 - Removal of a disconnected controller's virtual pad and recreation with the
   same identity on reconnect. Physical reconnect behavior remains unverified.
@@ -110,6 +112,7 @@ Add the settings you need, for example:
 # Optional: restrict operation to one controller.
 # bluetooth_address = "AA:BB:CC:DD:EE:FF"
 rumble = true
+led = true
 
 [motion]
 enabled = false
@@ -117,6 +120,11 @@ enabled = false
 
 Set `enabled = true` to try experimental pitch/yaw input. For all options, see
 the [configuration reference](ARCHITECTURE.md#configuration-reference).
+
+Set `led = false` to disable host color forwarding. A host color can replace the
+controller's configured lighting effect. The daemon cannot restore that effect
+on exit. A full power cycle restored the original button-pulse effect on my
+controller; other firmware might behave differently.
 
 **Motion warning:** The daemon does not restore the controller's motion selector
 on exit. If ordinary input stops after disabling motion, fully power-cycle and
@@ -142,7 +150,7 @@ optional [user service](docs/uhid-migration.md#optional-user-service-for-a-new-i
 
 ## Disclaimer
 
-This software sends Bluetooth commands for rumble and experimental motion. Use
+This software sends Bluetooth commands for rumble, color and experimental motion. Use
 it at your own risk: unexpected behavior, loss of functionality, or other damage
 may occur. See the [motion warning](#configure-and-run).
 

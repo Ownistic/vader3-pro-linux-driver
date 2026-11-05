@@ -71,6 +71,13 @@ controller; restarting Steam alone does not reset the selector. Calibration,
 physical rumble, motion accuracy, reconnect behavior, Steam UI refresh and
 end-to-end latency require separate hardware testing.
 
+Color forwarding is experimental. For an attended check, change the virtual
+DualSense lightbar color in Steam and confirm the physical lights change. Check
+rumble separately and while changing color. Record the tested revision and
+binary. Color forwarding can replace the controller's configured lighting
+effect. The daemon cannot restore it; a full power cycle restored my controller's
+button-pulse effect, but other firmware might differ.
+
 ## Neutral virtual-kernel probe
 
 The following optional example creates synthetic virtual devices only. It opens

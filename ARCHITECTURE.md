@@ -42,8 +42,8 @@ flowchart TB
     steam -.->|Host feedback| kernel
     kernel -.-> uhid
     uhid -.-> feedback
-    feedback -.->|Desired motor levels| ble
-    ble -.->|NUS rumble via BlueZ| controllers
+    feedback -.->|Desired motor levels and color| ble
+    ble -.->|NUS rumble and RGB via BlueZ| controllers
 ```
 
 Each eligible physical controller has its own UHID pad and worker. UHID is the
@@ -62,7 +62,7 @@ or USB rumble fallback.
 | [nus_input.rs](driver/src/nus_input.rs), [motion.rs](driver/src/motion.rs) | NUS controls and two packed motion components |
 | [uhid_runtime.rs](driver/src/uhid_runtime.rs), [uhid_runtime/fleet.rs](driver/src/uhid_runtime/fleet.rs), [uhid_runtime/session.rs](driver/src/uhid_runtime/session.rs) | Fleet discovery, independent session threads, input selection, stale state and teardown |
 | [edge.rs](driver/src/edge.rs), [edge_report.rs](driver/src/edge_report.rs) | UHID lifecycle, virtual reports and host feedback |
-| [ble_worker.rs](driver/src/ble_worker.rs), [rumble.rs](driver/src/rumble.rs) | BlueZ sessions, motion activation and physical rumble |
+| [ble_worker.rs](driver/src/ble_worker.rs), [rumble.rs](driver/src/rumble.rs) | BlueZ sessions, motion activation, physical rumble and RGB color |
 
 ## Discovery and startup
 
@@ -78,10 +78,10 @@ appear on that bus. Descriptor matching does not add dongle support.
 
 The manager only scans, starts, signals and reaps sessions. Each controller
 session runs its own input, virtual-pad and 4 ms reporting loop, attempts verified
-evdev grabs, and starts a separate BLE worker when rumble or motion is enabled.
+evdev grabs, and starts a separate BLE worker when rumble, color or motion is enabled.
 Basic input does not wait for a BlueZ lookup. Blocking D-Bus calls stay off the
 manager and other controllers' input loops.
-All sessions use the same rumble and motion settings; there are no per-controller
+All sessions use the same rumble, color and motion settings; there are no per-controller
 configuration overrides.
 If a session's BLE worker cannot start, only that session is retired. It closes
 its virtual pad on its own thread while holding its lease through the close;
@@ -175,7 +175,18 @@ Cleanup calls also target the old unique owner, never a replacement service.
 
 ## Feedback and lifecycle
 
-Host output updates the desired motor levels. The BLE worker coalesces updates
+Host output updates the desired motor levels and, when enabled, RGB color.
+The BLE worker coalesces color updates and sends at most one every 50 ms. Color
+and rumble are independent, including when one host report contains both.
+Color writes are not refreshed periodically, and pending colors are discarded
+on host CLOSE/STOP or connection-generation changes. The daemon does not
+restore the controller's previous lighting effect. A full power cycle restored
+my controller's original button-pulse effect; other firmware might differ.
+On my Legion Go, the physical LEDs followed Steam color changes in an attended
+test. This does not establish every color, multi-controller behavior or other
+firmware versions.
+
+The BLE worker coalesces motor updates
 instead of queueing every effect, checks the connection generation before
 writing, and refreshes nonzero output every 100 ms. Physical rumble commands
 expire after 200 ms unless refreshed.
@@ -244,6 +255,7 @@ symlinks load their target normally.
 | `product_id` | `0x0041` | Compatibility metadata and diagnostic text; does not change discovery. |
 | `virtual_name` | `Flydigi Vader 3 Pro (UHID DualSense Edge)` | UHID name: 1–127 UTF-8 bytes, without NUL. |
 | `rumble` | `true` | Forward host feedback over Bluetooth NUS. |
+| `led` | `true` | Forward host lightbar colors over Bluetooth NUS. Set to `false` to prevent host color updates. |
 | `bluetooth_address` | unset | Optional six-octet Bluetooth address filter; unset selects all eligible controllers, while a valid value selects one. Validated even when rumble and motion are disabled. |
 | `poll_ms` | `4` | Compatibility-only value; has no effect on the UHID runtime. |
 | `suppress_physical` | `true` | Attempt physical evdev grabs; failures produce warnings. |

@@ -230,17 +230,7 @@ pub fn bluetooth_input_report(
 /// for unrelated, malformed, or unknown host traffic.
 #[must_use]
 pub fn bluetooth_feedback(report: &[u8], active: bool) -> Option<Feedback> {
-    if report.len() != 78 || report[0] != 0x31 || !bluetooth_verify_crc(0xa2, report) {
-        return None;
-    }
-    let base = if report[1] == 0x02 {
-        2
-    } else if report[1] & 0x0f == 0 && report[2] == 0x10 {
-        3
-    } else {
-        return None;
-    };
-    let common = &report[base..base + 47];
+    let common = bluetooth_output_common(report)?;
     if common[0] & 1 != 0 || common[38] & 4 != 0 {
         let scale = |v: u8| ((u16::from(v) * 250 + 127) / 255) as u8;
         let left = scale(common[3]);
@@ -255,6 +245,27 @@ pub fn bluetooth_feedback(report: &[u8], active: bool) -> Option<Feedback> {
         return Some(Feedback::Stop);
     }
     None
+}
+
+/// Decode an explicitly enabled lightbar color from a valid Bluetooth output.
+#[must_use]
+pub fn bluetooth_lightbar(report: &[u8]) -> Option<[u8; 3]> {
+    let common = bluetooth_output_common(report)?;
+    (common[1] & 0x04 != 0).then(|| [common[44], common[45], common[46]])
+}
+
+fn bluetooth_output_common(report: &[u8]) -> Option<&[u8]> {
+    if report.len() != 78 || report[0] != 0x31 || !bluetooth_verify_crc(0xa2, report) {
+        return None;
+    }
+    let base = if report[1] == 0x02 {
+        2
+    } else if report[1] & 0x0f == 0 && report[2] == 0x10 {
+        3
+    } else {
+        return None;
+    };
+    Some(&report[base..base + 47])
 }
 
 #[cfg(test)]
@@ -431,6 +442,39 @@ mod tests {
         tickle[0] = 0x31;
         tickle[1] = 2;
         assert_eq!(bluetooth_feedback(&tickle, true), None);
+    }
+
+    #[test]
+    fn bluetooth_lightbar_requires_valid_report_and_preserves_rumble() {
+        for (header, base) in [([0x31, 0x20, 0x10], 3), ([0x31, 0x02, 0x00], 2)] {
+            let mut report = [0u8; 78];
+            report[..3].copy_from_slice(&header);
+            report[base + 1] = 4;
+            report[base + 44..base + 47].copy_from_slice(&[12, 34, 56]);
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_lightbar(&report), Some([12, 34, 56]));
+            assert_eq!(bluetooth_feedback(&report, true), None);
+            report[base] = 1;
+            report[base + 3] = 255;
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_lightbar(&report), Some([12, 34, 56]));
+            assert_eq!(
+                bluetooth_feedback(&report, false),
+                Some(Feedback::Levels(250, 0))
+            );
+            report[base + 44..base + 47].fill(0);
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_lightbar(&report), Some([0, 0, 0]));
+            report[base + 1] = 0;
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_lightbar(&report), None);
+            report[base + 1] = 4; // CRC no longer valid
+            assert_eq!(bluetooth_lightbar(&report), None);
+            assert_eq!(bluetooth_lightbar(&report[..77]), None);
+            report[1] = 3;
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_lightbar(&report), None);
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Background BlueZ transport for optional experimental motion and rumble.
+//! Background BlueZ transport for motion, rumble and lightbar colors.
 //!
 //! Motion values are uncalibrated; their physical meaning, axes and scale are
 //! not established. A successful selector write is not an observed response.
@@ -27,6 +27,7 @@ const RETRY: Duration = Duration::from_millis(500);
 const CHECK_LINK: Duration = Duration::from_secs(1);
 const PASSIVE_WAIT: Duration = Duration::from_millis(250);
 const ACTIVATION_WAIT: Duration = Duration::from_secs(1);
+const LED_INTERVAL: Duration = Duration::from_millis(50);
 const TX_UUID: &str = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 const RX_UUID: &str = rumble::bluez::NUS_RX_UUID;
 const CHARACTERISTIC: &str = "org.bluez.GattCharacteristic1";
@@ -63,6 +64,8 @@ struct State {
     generation: u64,
     desired: (u8, u8),
     revision: u64,
+    color: Option<[u8; 3]>,
+    color_revision: u64,
     sample: Option<(u64, RawMotion, input::State, Instant)>,
     diagnostics: Diagnostics,
     activation_write_attempted: bool,
@@ -76,6 +79,8 @@ impl State {
             generation: 0,
             desired: (0, 0),
             revision: 0,
+            color: None,
+            color_revision: 0,
             sample: None,
             diagnostics: Diagnostics::default(),
             activation_write_attempted: false,
@@ -88,6 +93,7 @@ impl State {
             self.generation = self.generation.wrapping_add(1);
             self.desired = (0, 0);
             self.revision = self.revision.wrapping_add(1);
+            self.clear_color();
             self.sample = None;
             self.diagnostics.subscribed = false;
             self.diagnostics.selector_status = None;
@@ -101,6 +107,18 @@ impl State {
             self.desired = (left, right);
             self.revision = self.revision.wrapping_add(1);
         }
+    }
+
+    fn set_color(&mut self, color: [u8; 3]) {
+        if self.connected && !self.shutdown && self.color != Some(color) {
+            self.color = Some(color);
+            self.color_revision = self.color_revision.wrapping_add(1);
+        }
+    }
+
+    fn clear_color(&mut self) {
+        self.color = None;
+        self.color_revision = self.color_revision.wrapping_add(1);
     }
 
     fn record_selector_write_failure(&mut self) {
@@ -152,6 +170,7 @@ impl State {
             self.sample = None;
             self.desired = (0, 0);
             self.revision = self.revision.wrapping_add(1);
+            self.clear_color();
             self.diagnostics.subscribed = false;
             self.diagnostics.selector_status = None;
             self.diagnostics.activation = ActivationState::Idle;
@@ -219,8 +238,18 @@ impl BleWorker {
         motion_enabled: bool,
         rumble_enabled: bool,
     ) -> anyhow::Result<Self> {
+        Self::start_scoped_with_led(lease, motion_enabled, rumble_enabled, false)
+    }
+
+    /// Start a worker with optional host lightbar forwarding.
+    pub fn start_scoped_with_led(
+        lease: Arc<ControllerLease>,
+        motion_enabled: bool,
+        rumble_enabled: bool,
+        led_enabled: bool,
+    ) -> anyhow::Result<Self> {
         Self::spawn_scoped(lease, move |state, address| {
-            run(state, address, motion_enabled, rumble_enabled);
+            run(state, address, motion_enabled, rumble_enabled, led_enabled);
         })
     }
 
@@ -298,6 +327,16 @@ impl BleWorker {
     /// Replace the desired levels; feedback while disconnected is discarded.
     pub fn set_rumble(&self, left: u8, right: u8) {
         self.state.lock().unwrap().set_rumble(left, right);
+    }
+
+    /// Replace the desired color; updates are coalesced by the worker.
+    pub fn set_color(&self, color: [u8; 3]) {
+        self.state.lock().unwrap().set_color(color);
+    }
+
+    /// Discard pending colors without assuming an LED reset command.
+    pub fn clear_color(&self) {
+        self.state.lock().unwrap().clear_color();
     }
 
     /// Return the latest current-generation raw sample with its current age.
@@ -526,6 +565,10 @@ fn current(state: &Mutex<State>, generation: u64) -> bool {
     state.lock().unwrap().current(generation)
 }
 
+fn color_frame([red, green, blue]: [u8; 3]) -> [u8; 4] {
+    [0x12, red, green, blue]
+}
+
 fn select_motion(motion_enabled: bool, subscribed: bool, current: bool) -> bool {
     motion_enabled && subscribed && current
 }
@@ -560,7 +603,13 @@ fn replace_ascii_case_insensitive(text: &str, needle: &str, replacement: &str) -
     result
 }
 
-fn run(state: Arc<Mutex<State>>, address: String, motion_enabled: bool, rumble_enabled: bool) {
+fn run(
+    state: Arc<Mutex<State>>,
+    address: String,
+    motion_enabled: bool,
+    rumble_enabled: bool,
+    led_enabled: bool,
+) {
     loop {
         let (shutdown, connected, generation) = {
             let s = state.lock().unwrap();
@@ -569,7 +618,7 @@ fn run(state: Arc<Mutex<State>>, address: String, motion_enabled: bool, rumble_e
         if shutdown {
             break;
         }
-        if !connected || (!motion_enabled && !rumble_enabled) {
+        if !connected || (!motion_enabled && !rumble_enabled && !led_enabled) {
             thread::sleep(POLL);
             continue;
         }
@@ -589,7 +638,7 @@ fn run(state: Arc<Mutex<State>>, address: String, motion_enabled: bool, rumble_e
                                     &state,
                                     generation,
                                     motion_enabled,
-                                    rumble_enabled,
+                                    (rumble_enabled, led_enabled),
                                 );
                             }
                         }
@@ -617,8 +666,9 @@ fn session(
     state: &Arc<Mutex<State>>,
     generation: u64,
     motion_enabled: bool,
-    rumble_enabled: bool,
+    outputs: (bool, bool),
 ) {
+    let (rumble_enabled, led_enabled) = outputs;
     let paths = &binding.paths;
     let mut subscribed = false;
     let mut token = None;
@@ -680,14 +730,22 @@ fn session(
     let mut last_check = Instant::now();
     let mut last_write = Instant::now() - Duration::from_millis(rumble::BT_RESEND_MS);
     let mut sent_revision = None;
+    let mut sent_color = None;
+    let mut last_color_write = Instant::now() - LED_INTERVAL;
     let mut activation_deadline = motion_enabled.then(|| Instant::now() + PASSIVE_WAIT);
     loop {
         if !drain_pending(conn, state, generation) {
             break;
         }
-        let (current, desired, revision) = {
+        let (current, desired, revision, color, color_revision) = {
             let s = state.lock().unwrap();
-            (s.current(generation), s.desired, s.revision)
+            (
+                s.current(generation),
+                s.desired,
+                s.revision,
+                s.color,
+                s.color_revision,
+            )
         };
         if !current {
             break;
@@ -740,6 +798,26 @@ fn session(
                 }
                 sent_revision = Some(revision);
                 last_write = Instant::now();
+            }
+        }
+        // A rumble method call can block while ownership changes are queued.
+        // Process them before considering a second write on this connection.
+        if !drain_pending(conn, state, generation) {
+            break;
+        }
+        if let Some([red, green, blue]) = color.filter(|_| {
+            led_enabled && color != sent_color && last_color_write.elapsed() >= LED_INTERVAL
+        }) {
+            let valid = {
+                let s = state.lock().unwrap();
+                s.current(generation) && s.color_revision == color_revision && s.color == color
+            };
+            if valid {
+                if write(conn, binding, &color_frame([red, green, blue])).is_err() {
+                    break;
+                }
+                sent_color = color;
+                last_color_write = Instant::now();
             }
         }
         if last_check.elapsed() >= CHECK_LINK {
@@ -809,6 +887,33 @@ fn cleanup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn colors_are_coalesced_and_invalidated_by_connection_generation() {
+        assert_eq!(color_frame([0, 127, 255]), [0x12, 0, 127, 255]);
+        let mut state = State::new();
+        state.set_color([1, 2, 3]);
+        let revision = state.color_revision;
+        state.set_color([1, 2, 3]);
+        assert_eq!(state.color_revision, revision);
+        state.set_rumble(5, 6);
+        state.set_color([4, 5, 6]);
+        assert_eq!(state.color, Some([4, 5, 6]));
+        assert_eq!(state.desired, (5, 6));
+        state.clear_color();
+        assert_eq!(state.color, None);
+        assert_eq!(state.desired, (5, 6));
+        state.set_color([0, 0, 0]);
+        state.set_connected(false);
+        assert_eq!(state.color, None);
+        state.set_color([7, 8, 9]);
+        assert_eq!(state.color, None);
+        state.set_connected(true);
+        state.set_color([7, 8, 9]);
+        let generation = state.generation;
+        state.clear_session(generation);
+        assert_eq!(state.color, None);
+    }
 
     #[test]
     fn ble_worker_scoped_retirement_fences_until_transport_thread_exits() {

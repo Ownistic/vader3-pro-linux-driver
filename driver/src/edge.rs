@@ -117,6 +117,8 @@ pub struct EdgePad {
     origin: Instant,
     sequence: u8,
     levels: Option<(u8, u8)>,
+    pending_color: Option<[u8; 3]>,
+    color_cancelled: bool,
     output_count: u64,
 }
 
@@ -134,6 +136,8 @@ impl EdgePad {
             origin: Instant::now(),
             sequence: 0,
             levels: None,
+            pending_color: None,
+            color_cancelled: false,
             output_count: 0,
         }
     }
@@ -158,6 +162,8 @@ impl EdgePad {
             origin: Instant::now(),
             sequence: 0,
             levels: None,
+            pending_color: None,
+            color_cancelled: false,
             output_count: 0,
         })
     }
@@ -262,6 +268,15 @@ impl EdgePad {
         self.levels = None;
     }
 
+    /// Take the latest color received since the last call.
+    pub fn take_color(&mut self) -> Option<[u8; 3]> {
+        self.pending_color.take()
+    }
+
+    pub fn take_color_cancellation(&mut self) -> bool {
+        std::mem::take(&mut self.color_cancelled)
+    }
+
     pub(crate) fn cancel_quick_access(&mut self) {
         self.quick_access.cancel();
     }
@@ -277,6 +292,7 @@ impl EdgePad {
         self.opened = false;
         self.cancel_quick_access();
         self.stop_feedback();
+        self.pending_color = None;
         write_event(&mut self.file, &event(1, 4))
     }
 
@@ -303,6 +319,8 @@ impl EdgePad {
                 }
                 self.cancel_quick_access();
                 self.stop_feedback();
+                self.pending_color = None;
+                self.color_cancelled = true;
                 Ok(Some((0, 0)))
             }
             6 => {
@@ -311,6 +329,9 @@ impl EdgePad {
                 };
                 self.output_count = self.output_count.saturating_add(1);
                 let update = edge_report::bluetooth_feedback(report, self.levels.is_some());
+                if let Some(color) = edge_report::bluetooth_lightbar(report) {
+                    self.pending_color = Some(color);
+                }
                 let next = match update {
                     Some(Feedback::Levels(l, r)) => Some((l, r)),
                     Some(Feedback::Stop) => Some((0, 0)),
@@ -433,6 +454,8 @@ mod tests {
                 origin: Instant::now(),
                 sequence: 0,
                 levels: None,
+                pending_color: None,
+                color_cancelled: false,
                 output_count: 0,
             },
             host,
@@ -807,6 +830,8 @@ mod tests {
             origin: Instant::now(),
             sequence: 0,
             levels: None,
+            pending_color: None,
+            color_cancelled: false,
             output_count: 0,
         };
         assert!(pad
@@ -846,6 +871,36 @@ mod tests {
         assert!(!pad.started);
         pad.destroy().unwrap();
         pad.destroy().unwrap();
+    }
+
+    #[test]
+    fn lightbar_is_independent_of_rumble_and_cancelled_on_close() {
+        let (mut pad, _) = test_pad();
+        let mut event = event(6, EVENT_SIZE);
+        put16(&mut event, 4100, 78);
+        event[4102] = 1;
+        event[4] = 0x31;
+        event[6] = 0x10;
+        event[8] = 4;
+        event[51..54].copy_from_slice(&[1, 2, 3]);
+        edge_report::bluetooth_append_crc(0xa2, &mut event[4..82]);
+        assert_eq!(pad.handle(&event).unwrap(), None);
+        assert_eq!(pad.take_color(), Some([1, 2, 3]));
+        event[51..54].copy_from_slice(&[4, 5, 6]);
+        edge_report::bluetooth_append_crc(0xa2, &mut event[4..82]);
+        pad.handle(&event).unwrap();
+        let mut rumble = event.clone();
+        rumble[8] = 0;
+        rumble[7] = 1;
+        rumble[10] = 255;
+        edge_report::bluetooth_append_crc(0xa2, &mut rumble[4..82]);
+        assert_eq!(pad.handle(&rumble).unwrap(), Some((250, 0)));
+        assert_eq!(pad.take_color(), Some([4, 5, 6]));
+        pad.handle(&event).unwrap();
+        pad.handle(&super::event(5, 4)).unwrap();
+        assert_eq!(pad.take_color(), None);
+        assert!(pad.take_color_cancellation());
+        assert!(!pad.take_color_cancellation());
     }
 
     #[test]
@@ -941,6 +996,8 @@ mod tests {
             origin: Instant::now(),
             sequence: 0,
             levels: None,
+            pending_color: None,
+            color_cancelled: false,
             output_count: 0,
         };
         host.send(&request(9, 5, 0)).unwrap();

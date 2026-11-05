@@ -159,6 +159,21 @@ effect. A transport success does not prove that motors moved or stopped.
 See [rumble.rs](driver/src/rumble.rs) for the implementation. Physical motor
 behavior is not established by the packet format or a successful write.
 
+## RGB color
+
+The daemon sends one NUS command for each selected solid color:
+
+```text
+12 <red> <green> <blue>
+```
+
+Values are bytes from the host lightbar output. On my controller, separate
+full-intensity red, green and blue commands produced the corresponding steady
+colors. A full power cycle restored its previous button-pulse effect. Other
+values and firmware versions have not all been verified on hardware. I also
+observed the physical LEDs follow Steam color changes on my Legion Go. The
+daemon does not restore the previous effect on exit.
+
 ## Virtual DualSense Edge boundary
 
 The virtual device uses Sony's Bluetooth report contract, not only a Bluetooth
@@ -181,8 +196,8 @@ The daemon answers feature reports `05` (41 bytes), `09` (20 bytes) and `20`
 Feature `09` carries the virtual identity in reversed octet order. Feature `05`
 contains fabricated calibration values, not physical measurements.
 
-Output reports use CRC domain `A2`; invalid CRCs, unknown layouts, tickle reports
-and LED-only output are ignored. The daemon recognizes two observed 78-byte
+Output reports use CRC domain `A2`; invalid CRCs, unknown layouts and tickle reports
+are ignored. The daemon recognizes two observed 78-byte
 layouts:
 
 | Layout | Identification and common payload | Motor and validity fields |
@@ -195,6 +210,10 @@ levels stop feedback. While a rumble effect is active, an all-zero common effect
 also stops it. Unknown or unrelated output does not change the feedback latch.
 Physical motor behavior is not established by report decoding or a successful
 transport write.
+
+In either layout, common byte 1 bit 2 enables the RGB values in common bytes
+44–46. A report can update both color and motors. Unrelated output does not
+clear either field.
 
 ## Limits
 

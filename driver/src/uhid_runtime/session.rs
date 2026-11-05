@@ -69,6 +69,8 @@ trait SessionIo {
     fn input_sample(&self) -> Option<(State, Duration)>;
     fn motion_sample(&self) -> Option<crate::edge_report::MotionSample>;
     fn feedback(&mut self, left: u8, right: u8);
+    fn color(&mut self, color: [u8; 3]);
+    fn clear_color(&mut self);
 }
 
 struct PhysicalIo<'a> {
@@ -94,6 +96,16 @@ impl SessionIo for PhysicalIo<'_> {
             worker.set_rumble(left, right);
         }
     }
+    fn color(&mut self, color: [u8; 3]) {
+        if let Some(worker) = self.worker {
+            worker.set_color(color);
+        }
+    }
+    fn clear_color(&mut self) {
+        if let Some(worker) = self.worker {
+            worker.clear_color();
+        }
+    }
 }
 
 fn session_loop(
@@ -107,6 +119,12 @@ fn session_loop(
     let mut next_report = Instant::now();
     while !stop.load(Ordering::Acquire) {
         let host = pad.poll_host()?;
+        if pad.take_color_cancellation() {
+            io.clear_color();
+        }
+        if let Some(color) = pad.take_color().filter(|_| cfg.led) {
+            io.color(color);
+        }
         if let Some((left, right)) = input.feedback(cfg.rumble, host) {
             io.feedback(left, right);
         }
@@ -302,7 +320,13 @@ pub fn run_pinned_session(
         pad.virtual_address()
     );
     let started = if worker_needed(&cfg) {
-        BleWorker::start_scoped(Arc::clone(&lease), cfg.motion.enabled, cfg.rumble).map(Some)
+        BleWorker::start_scoped_with_led(
+            Arc::clone(&lease),
+            cfg.motion.enabled,
+            cfg.rumble,
+            cfg.led,
+        )
+        .map(Some)
     } else {
         Ok(None)
     };
@@ -359,6 +383,7 @@ pub(super) mod test_support {
         pub(crate) rx: mpsc::Receiver<Result<Vec<u8>>>,
         pub(crate) pending: Option<Result<Vec<u8>>>,
         pub(crate) feedback: mpsc::Sender<(u8, u8)>,
+        pub(crate) colors: mpsc::Sender<[u8; 3]>,
         pub(crate) nus: Arc<Mutex<Option<(State, Duration)>>>,
         pub(crate) motion: Arc<Mutex<Option<crate::edge_report::MotionSample>>>,
         pub(crate) hup: Arc<AtomicBool>,
@@ -370,6 +395,7 @@ pub(super) mod test_support {
         pub(crate) virtual_identity: MacAddress,
         pub(crate) physical: mpsc::Sender<Result<Vec<u8>>>,
         pub(crate) feedback: mpsc::Receiver<(u8, u8)>,
+        pub(crate) colors: mpsc::Receiver<[u8; 3]>,
         pub(crate) nus: Arc<Mutex<Option<(State, Duration)>>>,
         pub(crate) motion: Arc<Mutex<Option<crate::edge_report::MotionSample>>>,
         pub(crate) hup: Arc<AtomicBool>,
@@ -385,6 +411,7 @@ pub(super) mod test_support {
         let virtual_identity = pad.virtual_address();
         let (physical, rx) = mpsc::channel();
         let (feedback, received) = mpsc::channel();
+        let (colors, received_colors) = mpsc::channel();
         let nus = Arc::new(Mutex::new(None));
         let motion = Arc::new(Mutex::new(None));
         let hup = Arc::new(AtomicBool::new(false));
@@ -394,6 +421,7 @@ pub(super) mod test_support {
                 virtual_identity,
                 physical,
                 feedback: received,
+                colors: received_colors,
                 nus: Arc::clone(&nus),
                 motion: Arc::clone(&motion),
                 hup: Arc::clone(&hup),
@@ -402,6 +430,7 @@ pub(super) mod test_support {
                 rx,
                 pending: None,
                 feedback,
+                colors,
                 nus,
                 motion,
                 hup,
@@ -457,6 +486,10 @@ pub(super) mod test_support {
             }
             let _ = self.feedback.send((left, right));
         }
+        fn color(&mut self, color: [u8; 3]) {
+            let _ = self.colors.send(color);
+        }
+        fn clear_color(&mut self) {}
     }
 
     pub(crate) fn run_fake(
@@ -527,6 +560,53 @@ pub(super) mod tests {
     use crate::quick_access::QuickAccess;
 
     #[test]
+    fn session_colors_are_per_controller_and_can_be_disabled() {
+        use super::test_support::fixture;
+        use crate::identity::MacAddress;
+        use std::sync::mpsc::RecvTimeoutError;
+
+        let a: MacAddress = "12:34:56:78:9A:BC".parse().unwrap();
+        let b: MacAddress = "12:34:56:78:9A:BD".parse().unwrap();
+        let (first, mut io_a, mut pad_a) = fixture(a);
+        let (second, mut io_b, mut pad_b) = fixture(b);
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_a = Arc::clone(&stop);
+        let stop_b = Arc::clone(&stop);
+        let cfg_a = Config {
+            rumble: false,
+            ..Config::default()
+        };
+        let mut cfg_b = cfg_a.clone();
+        cfg_b.led = false;
+        let thread_a =
+            std::thread::spawn(move || session_loop(&cfg_a, &mut pad_a, &mut io_a, &stop_a));
+        let thread_b =
+            std::thread::spawn(move || session_loop(&cfg_b, &mut pad_b, &mut io_b, &stop_b));
+        let mut event = vec![0u8; 4103];
+        event[..4].copy_from_slice(&6u32.to_ne_bytes());
+        event[4] = 0x31;
+        event[6] = 0x10;
+        event[8] = 4;
+        event[51..54].copy_from_slice(&[3, 4, 5]);
+        edge_report::bluetooth_append_crc(0xa2, &mut event[4..82]);
+        event[4100..4102].copy_from_slice(&78u16.to_ne_bytes());
+        event[4102] = 1;
+        first.host.send(&event).unwrap();
+        second.host.send(&event).unwrap();
+        assert_eq!(
+            first.colors.recv_timeout(Duration::from_secs(2)).unwrap(),
+            [3, 4, 5]
+        );
+        assert_eq!(
+            second.colors.recv_timeout(Duration::from_millis(100)),
+            Err(RecvTimeoutError::Timeout)
+        );
+        stop.store(true, Ordering::Release);
+        thread_a.join().unwrap().unwrap();
+        thread_b.join().unwrap().unwrap();
+    }
+
+    #[test]
     fn session_shared_loop_uses_real_edge_hid_feedback_and_cleanup() {
         use super::test_support::{run_fake, FakeIo, SetupFaults};
         use crate::edge_report::bluetooth_append_crc;
@@ -552,10 +632,12 @@ pub(super) mod tests {
         let pad = EdgePad::from_test_file(file, address);
         let (physical_tx, rx) = mpsc::channel();
         let (feedback, feedback_rx) = mpsc::channel();
+        let (colors, color_rx) = mpsc::channel();
         let io = FakeIo {
             rx,
             pending: None,
             feedback,
+            colors,
             nus: Arc::new(Mutex::new(None)),
             motion: Arc::new(Mutex::new(None)),
             hup: Arc::new(AtomicBool::new(false)),
@@ -604,6 +686,8 @@ pub(super) mod tests {
         event[7] = 1;
         event[9] = 255;
         event[10] = 128;
+        event[8] = 4;
+        event[51..54].copy_from_slice(&[12, 34, 56]);
         bluetooth_append_crc(0xa2, &mut event[4..82]);
         event[4100..4102].copy_from_slice(&78u16.to_ne_bytes());
         event[4102] = 1;
@@ -611,6 +695,10 @@ pub(super) mod tests {
         assert_eq!(
             feedback_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
             (125, 250)
+        );
+        assert_eq!(
+            color_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            [12, 34, 56]
         );
         let mut notification = [0u8; 20];
         notification[..4].fill(0x80);
