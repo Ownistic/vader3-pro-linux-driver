@@ -5,7 +5,8 @@ It separates implemented packet handling from physical observations and static
 research. Byte offsets start at zero. Masks and packet examples are hexadecimal.
 
 The physical protocol is separate from the virtual DualSense Edge report format.
-The virtual device's USB-shaped identity does not add physical USB support.
+The virtual device uses Sony's Bluetooth report format; this does not add
+physical USB support.
 See [architecture](ARCHITECTURE.md) for runtime ownership and configuration.
 
 ## Bluetooth services
@@ -160,24 +161,45 @@ behavior is not established by the packet format or a successful write.
 
 ## Virtual DualSense Edge boundary
 
-The [virtual encoder](driver/src/edge_report.rs) generates a 64-byte report with
-ID `01`. FN triggers an experimental PS-only, PS + Cross, PS-only, release
-sequence, with minimum durations 100, 60 and 40 ms for the first three phases.
-PS (byte 10 mask `01`) and Cross (byte 8 mask `20`) are OR-composed with
-physical Home and A. The sequence targets Steam's Guide + A Quick Access
-shortcut.
-The six extra buttons remain independent. Extra
-buttons occupy byte 10: C `02`, Z `04`, M1 `10`, M2 `20`, M3 `40`, M4 `80`.
-Gyro X/Y occupy bytes 16–19 as little-endian signed 16-bit values; gyro Z is zero.
+The virtual device uses Sony's Bluetooth report contract, not only a Bluetooth
+bus identifier. Its identity is Sony `054c:0df2`, bus `BUS_BLUETOOTH` (5), with
+report ID `31` and 78-byte input and output reports. This virtual identity does
+not add physical USB or dongle support.
 
-Host output is a separate protocol. The runtime recognizes numbered report `02`
-at length 48 or 63. Rumble-valid flags are byte 1 bit 0 or byte 39 bit 2. Left
-motor level comes from byte 4 and right from byte 3, scaled from `0`–`255` to
-`0`–`250`. Unrelated host output is not forwarded as a physical command.
+Input reports use CRC-32/ISO-HDLC with domain byte `A1`. The final four bytes
+contain the little-endian CRC over the domain byte followed by the preceding
+report bytes. The 63-byte common control report occupies Bluetooth bytes 2–64.
+The common report's input header is currently provisional. Button data is at
+bytes 9–11, gyro X/Y at bytes 17/19, and the timestamp at byte 29. Gyro Z is zero.
+The six extra buttons remain independent. FN emits an experimental PS-only,
+PS + Cross, PS-only, release sequence with minimum durations of 100, 60 and
+40 ms for its first three phases. PS and Cross are OR-composed with physical
+Home and A and target Steam's Guide + A Quick Access shortcut.
+
+The daemon answers feature reports `05` (41 bytes), `09` (20 bytes) and `20`
+(64 bytes). Each uses CRC domain `A3` and the same final-four-byte CRC rule.
+Feature `09` carries the virtual identity in reversed octet order. Feature `05`
+contains fabricated calibration values, not physical measurements.
+
+Output reports use CRC domain `A2`; invalid CRCs, unknown layouts, tickle reports
+and LED-only output are ignored. The daemon recognizes two observed 78-byte
+layouts:
+
+| Layout | Identification and common payload | Motor and validity fields |
+| --- | --- | --- |
+| Linux | Byte 1 low nibble `0`; byte 2 tag `10`; common data starts at byte 3 | Right/left levels at bytes 5/6; validity flags at byte 3 bit 0 and byte 41 bit 2 |
+| SDL | Byte 1 `02`; common data starts at byte 2 | Right/left levels at bytes 4/5; validity flags at byte 2 bit 0 and byte 40 bit 2 |
+
+Levels scale from `0`–`255` to `0`–`250`. Valid rumble flags carrying zero
+levels stop feedback. While a rumble effect is active, an all-zero common effect
+also stops it. Unknown or unrelated output does not change the feedback latch.
+Physical motor behavior is not established by report decoding or a successful
+transport write.
 
 ## Limits
 
 These layouts describe the current implementation. Earlier hardware observations
-do not establish behavior for this build or its pitch correction. USB reference
-captures are not a supported product transport. This document does not authorize
-uncharacterized commands or firmware changes.
+do not establish behavior for this build or its pitch correction. The input
+header remains provisional, and the two gyro axes remain uncalibrated. USB
+reference captures are not a supported product transport. This document does
+not authorize uncharacterized commands or firmware changes.

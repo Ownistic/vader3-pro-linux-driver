@@ -1,4 +1,4 @@
-//! Experimental event-driven Edge backend. The virtual device survives link loss.
+//! Identity-bound controller sessions and fleet supervision.
 
 use std::time::{Duration, Instant};
 
@@ -6,15 +6,20 @@ use anyhow::{Context, Result};
 
 use crate::ble_worker::BleWorker;
 use crate::config::Config;
-use crate::device::{self, PhysicalDevice};
+use crate::device::PhysicalDevice;
 use crate::edge::EdgePad;
 use crate::input::{self, State};
 use crate::suppress::{self, ExclusiveGrab};
-use crate::{describe, log_debug, log_info, log_warn, Logger};
+use crate::{log_info, log_warn, Logger};
+
+mod session;
+pub use session::{run_pinned_session, SessionExit};
+mod fleet;
+pub use fleet::ControllerFleet;
 
 const REPORT_INTERVAL: Duration = Duration::from_millis(4);
-const REATTACH_INTERVAL: Duration = Duration::from_secs(1);
-const METRICS_INTERVAL: Duration = Duration::from_secs(5);
+// Limit each drain so a busy device cannot starve host events and report deadlines.
+const MAX_PHYSICAL_REPORTS_PER_TICK: usize = 64;
 
 fn worker_needed(cfg: &Config) -> bool {
     cfg.motion.enabled || cfg.rumble
@@ -61,296 +66,6 @@ fn choose_input(
     }
 }
 
-fn attach(cfg: &Config, log: &Logger) -> Result<(PhysicalDevice, Vec<ExclusiveGrab>)> {
-    let node = device::discover_candidates()
-        .into_iter()
-        .next()
-        .with_context(|| {
-            format!(
-                "no hidraw device with {:04x}:{:04x}; is the controller connected?",
-                cfg.vendor_id, cfg.product_id
-            )
-        })?;
-    let physical = PhysicalDevice::open(&node.path)?;
-    log_info!(
-        log,
-        "physical device: {} ({:04x}:{:04x}, bus {:#x}, interface {:?}, {})",
-        node.path.display(),
-        node.vendor,
-        node.product,
-        node.bus,
-        node.interface,
-        if node.descriptor_match {
-            "matched by descriptor"
-        } else {
-            "matched by id"
-        }
-    );
-    log_info!(log, "transport: {}", physical.bus_label());
-    let mut grabs = Vec::new();
-    if cfg.suppress_physical {
-        let nodes = suppress::evdev_nodes_for(&node.sysfs);
-        if nodes.is_empty() {
-            log_warn!(
-                log,
-                "no evdev nodes found for the controller; not suppressing"
-            );
-        }
-        for path in nodes {
-            match ExclusiveGrab::acquire(&path) {
-                Ok(grab) => {
-                    log_info!(log, "suppressed physical node {}", grab.path().display());
-                    grabs.push(grab);
-                }
-                Err(e) => log_warn!(log, "could not suppress {}: {e:#}", path.display()),
-            }
-        }
-    }
-    Ok((physical, grabs))
-}
-
-#[derive(Default)]
-struct Counters {
-    physical: u64,
-    changes: u64,
-    nus_changes: u64,
-    virtual_reports: u64,
-    max_generation_us: u128,
-    debug_changes: u64,
-}
-
-/// Owns all handles required to keep the virtual device and physical link alive.
-pub struct EdgeRuntime {
-    cfg: Config,
-    log: Logger,
-    pad: EdgePad,
-    worker: Option<BleWorker>,
-    physical: Option<PhysicalDevice>,
-    grabs: Vec<ExclusiveGrab>,
-    state: State,
-    controls_valid: bool,
-    nus_active: bool,
-    next_report: Instant,
-    next_attach: Instant,
-    next_metrics: Instant,
-    counters: Counters,
-}
-
-impl EdgeRuntime {
-    pub fn start(cfg: Config) -> Result<Self> {
-        cfg.validate()?;
-        let log = Logger::new(&cfg.log_level);
-        let (physical, grabs) = attach(&cfg, &log)?;
-        let pad = EdgePad::create(&cfg.virtual_name)?;
-        log_info!(log, "experimental UHID virtual pad created: {}", pad.name());
-        let worker = worker_needed(&cfg).then(|| {
-            BleWorker::start(
-                cfg.bluetooth_address.clone().expect("validated address"),
-                cfg.motion.enabled,
-                cfg.rumble,
-            )
-        });
-        let now = Instant::now();
-        Ok(Self {
-            cfg,
-            log,
-            pad,
-            worker,
-            physical: Some(physical),
-            grabs,
-            state: State::default(),
-            controls_valid: false,
-            nus_active: false,
-            next_report: now,
-            next_attach: now + REATTACH_INTERVAL,
-            next_metrics: now + METRICS_INTERVAL,
-            counters: Counters::default(),
-        })
-    }
-
-    pub fn run<F: Fn() -> bool>(&mut self, should_stop: F) -> Result<()> {
-        while !should_stop() {
-            let feedback = self.pad.poll_host()?;
-            if feedback_allowed(self.physical.is_some(), self.cfg.rumble) {
-                if let (Some(worker), Some((left, right))) = (&self.worker, feedback) {
-                    worker.set_rumble(left, right);
-                }
-            } else {
-                self.pad.stop_feedback();
-            }
-
-            let now = Instant::now();
-            if self.physical.is_none() && now >= self.next_attach {
-                self.next_attach = now + REATTACH_INTERVAL;
-                if let Ok((physical, grabs)) = attach(&self.cfg, &self.log) {
-                    log_info!(
-                        self.log,
-                        "physical device reconnected: {}",
-                        physical.path.display()
-                    );
-                    self.grabs = grabs;
-                    self.physical = Some(physical);
-                    if let Some(worker) = &self.worker {
-                        worker.set_connected(true);
-                    }
-                }
-            }
-            if now >= self.next_metrics {
-                let diag = self
-                    .worker
-                    .as_ref()
-                    .map(BleWorker::diagnostics)
-                    .unwrap_or_default();
-                log_info!(self.log, "UHID counters (5s): physical_reports={} state_updates={} nus_state_updates={} virtual_reports={} motion_notifications_total={} selector_status={:?} subscribed={} max_report_generation_us={}", self.counters.physical, self.counters.changes, self.counters.nus_changes, self.counters.virtual_reports, diag.motion_notifications, diag.selector_status, diag.subscribed, self.counters.max_generation_us);
-                self.counters = Counters::default();
-                self.next_metrics = now + METRICS_INTERVAL;
-            }
-            let changed = self.update_input(None);
-            if self.pad.started() && report_due(now, self.next_report, changed) {
-                self.send()?;
-            } else if !self.pad.started() && now >= self.next_report {
-                self.next_report = now + REPORT_INTERVAL;
-            }
-
-            let timeout = self.next_report.saturating_duration_since(Instant::now());
-            let Some(physical) = &mut self.physical else {
-                std::thread::sleep(timeout);
-                continue;
-            };
-            let outcome = (|| -> Result<Option<State>> {
-                if !physical.wait_readable_checked(timeout)? {
-                    return Ok(None);
-                }
-                let mut latest = None;
-                while let Some(raw) = physical.try_read()? {
-                    self.counters.physical += 1;
-                    if let Ok(state) = input::parse(&raw) {
-                        latest = Some(state);
-                    }
-                }
-                Ok(latest)
-            })();
-            match outcome {
-                Ok(Some(state)) => {
-                    if self.update_input(Some(state)) && self.pad.started() {
-                        self.send()?;
-                    }
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    log_warn!(self.log, "physical device lost: {e:#}");
-                    self.disconnect();
-                    if self.pad.started() {
-                        self.send()?;
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn update_input(&mut self, hid: Option<State>) -> bool {
-        let sample = if self.cfg.motion.enabled && self.physical.is_some() {
-            self.worker.as_ref().and_then(BleWorker::input_sample)
-        } else {
-            None
-        };
-        let (state, nus, valid) = choose_input(
-            &mut self.nus_active,
-            sample,
-            Duration::from_millis(self.cfg.motion.stale_ms),
-            hid,
-            self.state,
-            self.controls_valid,
-        );
-        let valid = valid && self.physical.is_some();
-        let validity_changed = valid != self.controls_valid;
-        self.controls_valid = valid;
-        if !valid {
-            self.pad.cancel_quick_access();
-        }
-        if state == self.state {
-            return validity_changed;
-        }
-        self.state = state;
-        self.counters.changes += 1;
-        if nus {
-            self.counters.nus_changes += 1;
-        }
-        if self.counters.debug_changes < 20 {
-            log_debug!(
-                self.log,
-                "{} state: {}",
-                if nus { "NUS" } else { "HID" },
-                describe(&state)
-            );
-            self.counters.debug_changes += 1;
-        }
-        true
-    }
-
-    fn send(&mut self) -> Result<()> {
-        let start = Instant::now();
-        let sample = if self.cfg.motion.enabled && self.physical.is_some() {
-            self.worker.as_ref().and_then(BleWorker::motion_sample)
-        } else {
-            None
-        };
-        self.pad.send(
-            &self.state,
-            self.controls_valid,
-            sample,
-            self.cfg.motion.axis_scales(),
-            self.cfg.motion.swap_xy,
-            Duration::from_millis(self.cfg.motion.stale_ms),
-        )?;
-        self.counters.virtual_reports += 1;
-        self.counters.max_generation_us = self
-            .counters
-            .max_generation_us
-            .max(start.elapsed().as_micros());
-        self.next_report = Instant::now() + REPORT_INTERVAL;
-        Ok(())
-    }
-
-    fn disconnect(&mut self) {
-        if let Some(worker) = &self.worker {
-            worker.set_connected(false);
-        }
-        self.pad.stop_feedback();
-        self.pad.cancel_quick_access();
-        self.state = State::default();
-        self.controls_valid = false;
-        self.nus_active = false;
-        self.physical = None;
-        self.grabs.clear();
-        self.next_attach = Instant::now() + REATTACH_INTERVAL;
-    }
-}
-
-impl Drop for EdgeRuntime {
-    fn drop(&mut self) {
-        if let Some(worker) = &self.worker {
-            worker.set_rumble(0, 0);
-        }
-        self.pad.stop_feedback();
-        self.pad.cancel_quick_access();
-        self.state = State::default();
-        self.controls_valid = false;
-        if self.pad.started() {
-            let _ = self.pad.send(
-                &self.state,
-                false,
-                None,
-                self.cfg.motion.axis_scales(),
-                self.cfg.motion.swap_xy,
-                Duration::from_millis(self.cfg.motion.stale_ms),
-            );
-        }
-        self.grabs.clear();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,12 +94,13 @@ mod tests {
 
     #[test]
     fn direct_constructor_rejects_invalid_configuration_before_device_access() {
-        let cfg = Config::default();
-        assert!(EdgeRuntime::start(cfg)
+        let mut cfg = Config::default();
+        cfg.motion.stale_ms = 0;
+        assert!(ControllerFleet::new(cfg)
             .err()
             .unwrap()
             .to_string()
-            .contains("bluetooth_address"));
+            .contains("stale_ms"));
     }
 
     #[test]

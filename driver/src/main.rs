@@ -53,9 +53,10 @@ OPTIONS:
     -h, --help             show this help
     -V, --version          show the version
 
-The controller must already be connected. Bluetooth DInput is the supported
-transport; rumble needs `bluetooth_address` in the configuration because it is
-delivered over the Nordic UART characteristic rather than HID output reports.
+Bluetooth DInput controllers are detected automatically, including hotplug and
+multiple controllers. The daemon waits when none are connected. Set the optional
+`bluetooth_address` configuration value to restrict operation to one controller.
+Rumble uses Nordic UART rather than HID output reports; no pairing is performed.
 
 Requires access to the controller's hidraw and evdev nodes and /dev/uhid.
 See the README for permissions."

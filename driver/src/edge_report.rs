@@ -1,8 +1,7 @@
-//! Experimental DualSense Edge USB report encoding and feedback decoding.
+//! Experimental DualSense Edge report encoding and feedback decoding.
 //!
 //! This module does not create a device or enable a physical motion stream.
-//! Report field positions and flags follow the Linux hid-playstation driver and
-//! the USB layout described in the UHID implementation handoff.
+//! Bluetooth field positions follow the documented Linux and SDL report layouts.
 
 use std::time::Duration;
 
@@ -162,9 +161,277 @@ pub fn feedback(report: &[u8], active: bool) -> Option<Feedback> {
     None
 }
 
+/// CRC-32/ISO-HDLC of a report preceded by its Bluetooth domain byte.
+/// The reflected polynomial and initialization are specified by ISO-HDLC;
+/// the Bluetooth domains and their coverage are documented by Linux
+/// hid-playstation's report protocol.
+#[must_use]
+pub fn bluetooth_crc32(domain: u8, data: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for byte in std::iter::once(&domain).chain(data.iter()) {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xedb8_8320 & 0u32.wrapping_sub(crc & 1));
+        }
+    }
+    !crc
+}
+
+/// Write a Bluetooth CRC in the final four bytes. Returns false for short data.
+pub fn bluetooth_append_crc(domain: u8, report: &mut [u8]) -> bool {
+    let Some(end) = report.len().checked_sub(4) else {
+        return false;
+    };
+    let checksum = bluetooth_crc32(domain, &report[..end]);
+    report[end..].copy_from_slice(&checksum.to_le_bytes());
+    true
+}
+
+/// Check the final four bytes against the domain-prefixed report CRC.
+#[must_use]
+pub fn bluetooth_verify_crc(domain: u8, report: &[u8]) -> bool {
+    let Some(end) = report.len().checked_sub(4) else {
+        return false;
+    };
+    report[end..] == bluetooth_crc32(domain, &report[..end]).to_le_bytes()
+}
+
+/// Build a complete 78-byte Bluetooth input report from the common controls.
+///
+/// The zero Bluetooth header is provisional for full mode; it is not a claim
+/// about authentic hardware sequencing. The common sequence is at byte 8.
+#[must_use]
+pub fn bluetooth_input_report(
+    state: &State,
+    sample: Option<MotionSample>,
+    scale: [i32; 2],
+    swap_xy: bool,
+    stale_after: Duration,
+    elapsed: Duration,
+    sequence: u8,
+) -> [u8; 78] {
+    let common = input_report(
+        state,
+        sample,
+        scale,
+        swap_xy,
+        stale_after,
+        elapsed,
+        sequence,
+    );
+    let mut report = [0u8; 78];
+    report[0] = 0x31;
+    report[2..65].copy_from_slice(&common[1..64]);
+    bluetooth_append_crc(0xa1, &mut report);
+    report
+}
+
+/// Decode CRC-valid Linux or SDL Bluetooth output, preserving the active latch
+/// for unrelated, malformed, or unknown host traffic.
+#[must_use]
+pub fn bluetooth_feedback(report: &[u8], active: bool) -> Option<Feedback> {
+    if report.len() != 78 || report[0] != 0x31 || !bluetooth_verify_crc(0xa2, report) {
+        return None;
+    }
+    let base = if report[1] == 0x02 {
+        2
+    } else if report[1] & 0x0f == 0 && report[2] == 0x10 {
+        3
+    } else {
+        return None;
+    };
+    let common = &report[base..base + 47];
+    if common[0] & 1 != 0 || common[38] & 4 != 0 {
+        let scale = |v: u8| ((u16::from(v) * 250 + 127) / 255) as u8;
+        let left = scale(common[3]);
+        let right = scale(common[2]);
+        return if left == 0 && right == 0 {
+            Some(Feedback::Stop)
+        } else {
+            Some(Feedback::Levels(left, right))
+        };
+    }
+    if active && common.iter().all(|&b| b == 0) {
+        return Some(Feedback::Stop);
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn edge_report_bluetooth_crc_independent_vectors() {
+        for (domain, first, count, expected) in [
+            (0xa1, &[0x31][..], 73, 0x1c9c519d),
+            (0xa2, &[0x31, 0x00, 0x10][..], 71, 0x231501b5),
+            (0xa3, &[0x05][..], 36, 0x2666b240),
+            (0xa3, &[0x09][..], 15, 0xd3215df5),
+            (0xa3, &[0x20][..], 59, 0x5d4cd5cf),
+        ] {
+            let mut data = first.to_vec();
+            data.resize(data.len() + count, 0);
+            assert_eq!(bluetooth_crc32(domain, &data), expected);
+            data.extend_from_slice(&expected.to_le_bytes());
+            assert!(bluetooth_verify_crc(domain, &data));
+            data[0] ^= 1;
+            assert!(!bluetooth_verify_crc(domain, &data));
+        }
+        assert!(!bluetooth_append_crc(0xa1, &mut [0; 3]));
+        assert!(!bluetooth_verify_crc(0xa1, &[0; 3]));
+    }
+
+    #[test]
+    fn edge_report_bluetooth_neutral_literal_vector() {
+        // Calculated separately with Python zlib.crc32 over A1 plus bytes 0..74.
+        let expected: [u8; 78] = [
+            0x31, 0, 0x80, 0x80, 0x80, 0x80, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0x20, 0, 0, 0, 0, 0, 0x80, 0, 0, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x57, 0xca,
+            0xe6, 0x7a,
+        ];
+        assert_eq!(
+            bluetooth_input_report(
+                &State::default(),
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::ZERO,
+                0
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn edge_report_bluetooth_controls_extras_and_motion_offsets() {
+        let encode = |state: &State, sample, swap, stale, sequence| {
+            bluetooth_input_report(
+                state,
+                sample,
+                [-2, 3],
+                swap,
+                stale,
+                Duration::from_micros(7),
+                sequence,
+            )
+        };
+        for index in 0..crate::input::STANDARD_NAMES.len() {
+            let state = State {
+                buttons: 1 << index,
+                ..State::default()
+            };
+            let bt = encode(&state, None, false, Duration::ZERO, 37);
+            let common = input_report(
+                &state,
+                None,
+                [-2, 3],
+                false,
+                Duration::ZERO,
+                Duration::from_micros(7),
+                37,
+            );
+            assert_eq!(&bt[2..65], &common[1..64]);
+            assert!(bluetooth_verify_crc(0xa1, &bt));
+        }
+        for (index, bit) in [0x02, 0x04, 0x10, 0x20, 0x40, 0x80].into_iter().enumerate() {
+            let state = State {
+                extras: 1 << index,
+                ..State::default()
+            };
+            assert_eq!(encode(&state, None, false, Duration::ZERO, 0)[11], bit);
+        }
+        let sample = MotionSample {
+            raw: RawMotion {
+                first: 11,
+                second: -22,
+            },
+            age: Duration::from_millis(2),
+        };
+        let bt = encode(
+            &State::default(),
+            Some(sample),
+            true,
+            Duration::from_millis(2),
+            0xff,
+        );
+        let value = |at| i16::from_le_bytes([bt[at], bt[at + 1]]);
+        assert_eq!(
+            (value(17), value(19), value(21), value(27)),
+            (44, 33, 0, 8192)
+        );
+        assert_eq!(&bt[29..33], &21u32.to_le_bytes());
+        assert_eq!(bt[8], 0xff);
+        let stale = encode(
+            &State::default(),
+            Some(sample),
+            false,
+            Duration::from_millis(1),
+            0,
+        );
+        assert_eq!(&stale[17..23], &[0; 6]);
+        let nonswap = encode(
+            &State::default(),
+            Some(sample),
+            false,
+            Duration::from_millis(2),
+            0,
+        );
+        assert_eq!(i16::from_le_bytes([nonswap[17], nonswap[18]]), -22);
+        assert_eq!(i16::from_le_bytes([nonswap[19], nonswap[20]]), -66);
+    }
+
+    #[test]
+    fn edge_report_bluetooth_feedback_layouts_and_latch_safety() {
+        for (header, base) in [([0x31, 0x20, 0x10], 3), ([0x31, 0x02, 0x00], 2)] {
+            let mut report = [0u8; 78];
+            report[..3].copy_from_slice(&header);
+            report[base] = 1;
+            report[base + 2] = 255;
+            report[base + 3] = 128;
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(
+                bluetooth_feedback(&report, false),
+                Some(Feedback::Levels(125, 250))
+            );
+            let mut tampered = report;
+            tampered[base + 3] ^= 1;
+            assert_eq!(bluetooth_feedback(&tampered, true), None);
+            assert_eq!(bluetooth_feedback(&report[..77], true), None);
+            let mut wrong_id = report;
+            wrong_id[0] = 0x30;
+            bluetooth_append_crc(0xa2, &mut wrong_id);
+            assert_eq!(bluetooth_feedback(&wrong_id, true), None);
+            let mut unknown = report;
+            unknown[1] = 3;
+            bluetooth_append_crc(0xa2, &mut unknown);
+            assert_eq!(bluetooth_feedback(&unknown, true), None);
+            report[base] = 0;
+            report[base + 38] = 4;
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(
+                bluetooth_feedback(&report, false),
+                Some(Feedback::Levels(125, 250))
+            );
+            report[base + 2] = 0;
+            report[base + 3] = 0;
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_feedback(&report, false), Some(Feedback::Stop));
+            report[base + 38] = 0;
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_feedback(&report, true), Some(Feedback::Stop));
+            assert_eq!(bluetooth_feedback(&report, false), None);
+            report[base + 40] = 1; // LED-only, not a stop.
+            bluetooth_append_crc(0xa2, &mut report);
+            assert_eq!(bluetooth_feedback(&report, true), None);
+        }
+        let mut tickle = [0u8; 78];
+        tickle[0] = 0x31;
+        tickle[1] = 2;
+        assert_eq!(bluetooth_feedback(&tickle, true), None);
+    }
 
     #[test]
     fn bare_fn_does_not_affect_encoded_report() {

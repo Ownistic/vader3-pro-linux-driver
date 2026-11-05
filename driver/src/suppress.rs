@@ -24,6 +24,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+mod verified;
+pub use verified::{evdev_candidates_for, EvdevCandidate};
+
 /// `EVIOCGRAB` from `linux/input.h`: `_IOW('E', 0x90, int)`.
 const EVIOCGRAB: libc::c_ulong = 0x4004_4590;
 

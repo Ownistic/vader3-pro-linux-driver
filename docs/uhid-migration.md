@@ -1,8 +1,9 @@
 # Migrate to the UHID-only daemon
 
-The current daemon creates a virtual DualSense Edge through `/dev/uhid`. It no
-longer creates the former generic uinput pad, so the old SDL mapping and service
-are not part of the current setup. This guide only describes files from the
+The current daemon creates a separate virtual Bluetooth DualSense Edge through
+`/dev/uhid` for each eligible connected controller. It no longer creates the
+former generic uinput pad, so the old SDL mapping and service are not part of the
+current setup. This guide only describes files from the
 former README instructions. Inspect your installation before changing anything;
 do not assume every path below exists or is owned by this project.
 
@@ -48,28 +49,42 @@ them and edit only the required command rather than replacing the unit blindly.
 
 ## Install and test the new binary
 
-Build from this repository as described in the [README](../README.md). After the
-verified old unit is stopped, install the new binary at the path your setup uses.
-The former instructions used `~/.local/bin/vader3p-steam`. Create or update the
-configuration using the current README example, and set the real
-`bluetooth_address`: rumble defaults to enabled and rumble or motion requires
-that address. The existing `[pad] backend = "uhid"` selector remains valid. If
+Build from this repository as described in the [README](../README.md). Stop the
+verified old unit before starting the new daemon. Same-user ownership leases
+exclude only cooperating new instances; they cannot fence an old or otherwise
+uncooperative daemon. After the old unit is stopped, install the new binary at
+the path your setup uses. The former instructions used
+`~/.local/bin/vader3p-steam`. Create or update the configuration using the
+current README example. `bluetooth_address` is optional: when unset, all eligible
+connected controllers are selected; when set, it is a validated filter for one
+controller. Rumble and motion do not require an address. The existing
+`[pad] backend = "uhid"` selector remains valid. If
 your configuration explicitly selects `uinput`, remove or change that selector;
 the current daemon rejects it rather than choosing another backend. Motion
 remains opt-in with `[motion] enabled = false` by default.
 
-Check the current [device-permission guidance](../README.md#device-permissions).
+Inspect the service's `ExecStart` for an explicit `--config PATH`. Verify that
+the exact file exists, is readable, and contains valid configuration before
+starting the service. A missing explicit path is an error; the daemon does not
+fall back to the conventional configuration or defaults. Without `--config`,
+it reads the conventional file when present and uses defaults only when that file
+is absent. The example unit below specifies an explicit path, so create that
+file before starting the unit.
+
+Check the current [device-permission guidance](../README.md#device-access).
 The daemon needs access to `/dev/uhid`, the physical controller's hidraw node,
 and its evdev nodes. Grant access only to verified device nodes. The kernel must
 provide `hid-playstation`. Do not broaden permissions or unbind kernel drivers
 to migrate.
 
-Connect the controller in Bluetooth DInput mode, then run the daemon in the
-foreground and verify the expected virtual device and input behavior before
-installing a service. The controller must be connected when the daemon starts;
-a service that starts without it fails. Do not treat a successful command or
-transport write as proof of hardware behavior. Stop the foreground process with
-Ctrl+C before starting a service, so two daemon instances do not run together.
+Pair and connect controllers in Bluetooth DInput mode through the operating
+system; the daemon does not pair or connect devices or change system settings.
+Run the daemon in the foreground and verify virtual devices and input behavior
+before installing a service. It can start with no controllers connected and
+detect later connections. Its private per-user runtime directory must be valid
+for controller ownership leases. Do not treat a successful command or transport
+write as proof of hardware behavior. Stop the foreground process with Ctrl+C
+before starting a service.
 
 ## Remove only the old SDL mapping, if present
 

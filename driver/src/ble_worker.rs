@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
 use dbus::arg::{prop_cast, PropMap};
 use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
 use dbus::blocking::{Connection, Proxy};
@@ -15,6 +16,7 @@ use dbus::channel::MatchingReceiver;
 use dbus::message::MatchRule;
 
 use crate::edge_report::MotionSample;
+use crate::lease::ControllerLease;
 use crate::motion::{self, RawMotion};
 use crate::rumble;
 use crate::{input, nus_input};
@@ -184,17 +186,108 @@ pub struct BleWorker {
     thread: Option<JoinHandle<()>>,
 }
 
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct TestWorkerState(Arc<Mutex<State>>);
+
+#[cfg(test)]
+impl TestWorkerState {
+    pub(crate) fn feedback(&self, left: u8, right: u8) {
+        self.0.lock().unwrap().set_rumble(left, right);
+    }
+    pub(crate) fn snapshot(&self) -> (bool, bool, (u8, u8), u64) {
+        let state = self.0.lock().unwrap();
+        (
+            state.shutdown,
+            state.connected,
+            state.desired,
+            state.generation,
+        )
+    }
+    pub(crate) fn observe(&self, generation: u64, frame: &[u8]) -> bool {
+        let mut state = self.0.lock().unwrap();
+        state.observe(generation, frame);
+        state.sample.is_some()
+    }
+}
+
 impl BleWorker {
-    /// Start with the physical link presumed connected; discovery verifies it.
-    #[must_use]
-    pub fn start(address: String, motion_enabled: bool, rumble_enabled: bool) -> Self {
+    /// Start a worker bound to the physical address held by its lease bundle.
+    /// The worker thread owns the lease until all transport cleanup returns.
+    pub fn start_scoped(
+        lease: Arc<ControllerLease>,
+        motion_enabled: bool,
+        rumble_enabled: bool,
+    ) -> anyhow::Result<Self> {
+        Self::spawn_scoped(lease, move |state, address| {
+            run(state, address, motion_enabled, rumble_enabled);
+        })
+    }
+
+    fn spawn_scoped(
+        lease: Arc<ControllerLease>,
+        operation: impl FnOnce(Arc<Mutex<State>>, String) + Send + 'static,
+    ) -> anyhow::Result<Self> {
+        Self::spawn_scoped_with(lease, operation, |task| {
+            thread::Builder::new().name("vader-ble".into()).spawn(task)
+        })
+    }
+
+    fn spawn_scoped_with(
+        lease: Arc<ControllerLease>,
+        operation: impl FnOnce(Arc<Mutex<State>>, String) + Send + 'static,
+        spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<JoinHandle<()>>,
+    ) -> anyhow::Result<Self> {
         let state = Arc::new(Mutex::new(State::new()));
         let shared = Arc::clone(&state);
-        let thread = thread::spawn(move || run(shared, address, motion_enabled, rumble_enabled));
-        Self {
+        let address = lease.physical_address().to_string();
+        let task = Box::new(move || {
+            operation(shared, address);
+            drop(lease);
+        });
+        let thread = spawn(task).context("spawning BLE worker thread")?;
+        Ok(Self {
             state,
             thread: Some(thread),
-        }
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn spawn_scoped_test(
+        lease: Arc<ControllerLease>,
+        operation: impl FnOnce() + Send + 'static,
+    ) -> anyhow::Result<Self> {
+        Self::spawn_scoped(lease, move |_, _| operation())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_spawn_scoped_test(lease: Arc<ControllerLease>) -> anyhow::Result<Self> {
+        Self::spawn_scoped_with(
+            lease,
+            |_, _| panic!("failed spawner must not run task"),
+            |_| Err(std::io::Error::from_raw_os_error(libc::EAGAIN)),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_state(&self) -> TestWorkerState {
+        TestWorkerState(Arc::clone(&self.state))
+    }
+
+    /// Immediately revoke this generation, desired feedback and cached samples.
+    pub fn request_shutdown(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.set_connected(false);
+        state.shutdown = true;
+        state.desired = (0, 0);
+        state.sample = None;
+    }
+
+    /// Request shutdown without waiting for the worker's transport or cleanup.
+    /// Join the returned thread only after `is_finished()` indicates completion.
+    pub fn retire(mut self) -> Option<JoinHandle<()>> {
+        self.request_shutdown();
+        self.thread.take()
     }
 
     /// Invalidate samples and feedback whenever physical connectivity changes.
@@ -232,12 +325,7 @@ impl BleWorker {
 
 impl Drop for BleWorker {
     fn drop(&mut self) {
-        {
-            let mut state = self.state.lock().unwrap();
-            state.shutdown = true;
-            state.desired = (0, 0);
-            state.sample = None;
-        }
+        self.request_shutdown();
         // D-Bus connection establishment itself is not guaranteed to have a timeout.
         // Detach rather than let shutdown indefinitely block the caller.
         if let Some(handle) = self.thread.take() {
@@ -721,6 +809,76 @@ fn cleanup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ble_worker_scoped_retirement_fences_until_transport_thread_exits() {
+        use crate::identity::MacAddress;
+        use crate::lease::LeaseDirectory;
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::mpsc;
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let leases = LeaseDirectory::open_at(dir.path()).unwrap();
+        let physical: MacAddress = "12:34:56:78:9A:BC".parse().unwrap();
+        let virtual_mac = physical.virtual_address();
+        let lease = Arc::new(ControllerLease::acquire(&leases, physical, virtual_mac).unwrap());
+        assert_eq!(lease.physical_address(), physical);
+        assert_eq!(lease.virtual_address(), virtual_mac);
+        let (stage_tx, stage_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let worker = BleWorker::spawn_scoped(Arc::clone(&lease), move |state, address| {
+            assert_eq!(address, "12:34:56:78:9A:BC");
+            for stage in 0..3 {
+                stage_tx.send(stage).unwrap();
+                if release_rx.recv_timeout(Duration::from_secs(5)).is_err() {
+                    return;
+                }
+                if stage == 2 {
+                    // An old callback after shutdown cannot restore samples.
+                    let mut state = state.lock().unwrap();
+                    let mut frame = [0; 20];
+                    frame[18] = 0xfe;
+                    state.observe(0, &frame);
+                    assert!(state.sample.is_none());
+                }
+            }
+        })
+        .unwrap();
+        let shared = Arc::clone(&worker.state);
+        worker.set_rumble(70, 80);
+        assert_eq!(stage_rx.recv_timeout(Duration::from_secs(5)).unwrap(), 0);
+        let mut frame = [0; 20];
+        frame[18] = 0xfe;
+        shared.lock().unwrap().observe(0, &frame);
+        assert!(shared.lock().unwrap().sample.is_some());
+        let start = Instant::now();
+        let handle = worker.retire().unwrap();
+        assert!(start.elapsed() < Duration::from_millis(500));
+        drop(lease);
+        {
+            let mut state = shared.lock().unwrap();
+            assert!(state.shutdown);
+            assert!(!state.connected);
+            assert_eq!(state.desired, (0, 0));
+            assert!(state.sample.is_none());
+            assert!(!state.current(0));
+            state.observe(0, &frame);
+            assert!(state.sample.is_none());
+        }
+        assert!(ControllerLease::acquire(&leases, physical, virtual_mac).is_err());
+        for stage in 1..3 {
+            release_tx.send(()).unwrap();
+            assert_eq!(
+                stage_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+                stage
+            );
+            assert!(ControllerLease::acquire(&leases, physical, virtual_mac).is_err());
+        }
+        release_tx.send(()).unwrap();
+        handle.join().unwrap();
+        assert!(ControllerLease::acquire(&leases, physical, virtual_mac).is_ok());
+    }
 
     fn notification(sender: Option<&str>, destination: Option<&str>) -> dbus::Message {
         let mut props = PropMap::new();

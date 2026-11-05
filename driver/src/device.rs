@@ -13,6 +13,9 @@ use anyhow::{Context, Result};
 
 use crate::input::{self, State};
 
+mod identified;
+pub use identified::{discover_identified, DiscoverySnapshot, IdentifiedNode};
+
 /// Vendor ID of Flydigi devices.
 pub const VENDOR_ID: u16 = 0xd7d7;
 
@@ -128,7 +131,11 @@ impl PhysicalDevice {
     pub fn try_read(&mut self) -> Result<Option<Vec<u8>>> {
         let mut buf = [0u8; 256];
         match self.file.read(&mut buf) {
-            Ok(0) => Ok(None),
+            Ok(0) => Err(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "physical device returned EOF",
+            ))
+            .with_context(|| format!("reading {}", self.path.display())),
             Ok(n) => Ok(Some(buf[..n].to_vec())),
             Err(e) if e.kind() == ErrorKind::WouldBlock => Ok(None),
             Err(e) if e.kind() == ErrorKind::Interrupted => Ok(None),
@@ -572,6 +579,23 @@ pub fn newest_state(reports: &[Vec<u8>]) -> Option<crate::input::State> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn physical_eof_is_disconnect_not_idle() {
+        let file = tempfile::tempfile().unwrap();
+        let mut physical = PhysicalDevice {
+            path: PathBuf::from("test-eof"),
+            vendor: VENDOR_ID,
+            product: PRODUCT_ID,
+            bus: 5,
+            file,
+        };
+        let error = physical.try_read().unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            ErrorKind::UnexpectedEof
+        );
+    }
 
     #[test]
     fn discovery_requires_target_identity_and_bluetooth_bus() {

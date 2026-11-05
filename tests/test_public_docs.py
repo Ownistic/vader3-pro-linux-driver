@@ -90,6 +90,27 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertTrue(documented)
         self.assertEqual(documented, allowed)
 
+    def test_missing_config_behavior_distinguishes_default_and_explicit_paths(self):
+        architecture = re.sub(r"\s+", " ", (ROOT / "ARCHITECTURE.md").read_text())
+        readme = re.sub(r"\s+", " ", (ROOT / "README.md").read_text())
+        migration = re.sub(r"\s+", " ", (ROOT / "docs/uhid-migration.md").read_text())
+
+        for name, text in (("architecture", architecture), ("README", readme)):
+            with self.subTest(doc=name):
+                self.assertRegex(text, r"(?i)(?:omit|without) `--config`")
+                self.assertIn("conventional file", text)
+                self.assertIn("absent", text)
+                self.assertIn("defaults", text)
+                self.assertIn("`--config PATH`", text)
+                self.assertIn("does not fall back to defaults", text)
+
+        self.assertIn("broken symlink", architecture)
+        self.assertIn("valid symlinks", architecture.lower())
+        self.assertIn("service's `ExecStart`", migration)
+        self.assertIn("explicit `--config PATH`", migration)
+        self.assertIn("exact file exists", migration)
+        self.assertIn("does not fall back", migration)
+
     def test_architecture_diagrams_use_mermaid(self):
         architecture = (ROOT / "ARCHITECTURE.md").read_text()
         diagrams = re.findall(r"```mermaid\s*\n(.*?)\n```", architecture, re.DOTALL)
@@ -146,6 +167,70 @@ class PublicDocumentationTests(unittest.TestCase):
         for term in ("fabricated", "third", "EVIOCGRAB", "prevent device enumeration"):
             self.assertIn(term, architecture)
         self.assertTrue((ROOT / "docs/steam-controller-visibility.md").is_file())
+
+    def test_current_guides_document_automatic_controller_lifecycle(self):
+        readme = (ROOT / "README.md").read_text()
+        architecture = (ROOT / "ARCHITECTURE.md").read_text()
+        testing = (ROOT / "docs/TESTING.md").read_text()
+        migration = (ROOT / "docs/uhid-migration.md").read_text()
+        driver_readme = (ROOT / "driver/README.md").read_text()
+
+        for name, text in (
+            ("README.md", readme),
+            ("ARCHITECTURE.md", architecture),
+            ("docs/TESTING.md", testing),
+            ("docs/uhid-migration.md", migration),
+        ):
+            with self.subTest(doc=name):
+                self.assertIn("eligible", text)
+                self.assertIn("bluetooth_address", text)
+        self.assertIn("waits when no eligible controller is connected", driver_readme)
+        self.assertIn("same identity", driver_readme)
+        self.assertIn("detects later connections", readme)
+        self.assertIn("every second", architecture)
+        self.assertIn("same derived", architecture)
+        self.assertIn("one 1.2-second grace period", architecture)
+        self.assertIn("valid private per-user runtime directory", readme)
+        self.assertIn("cooperating processes running as the same user", architecture)
+        self.assertIn("uncooperative daemon", migration)
+        self.assertIn("Steam's device-list refresh is not guaranteed", testing)
+
+        current_guides = "\n".join(
+            (ROOT / name).read_text()
+            for name in (
+                "README.md",
+                "ARCHITECTURE.md",
+                "driver/README.md",
+                "docs/TESTING.md",
+                "docs/uhid-migration.md",
+            )
+        )
+        for stale_claim in (
+            "must be connected at startup",
+            "connected when the daemon starts",
+            "rumble or motion requires",
+            "UHID device survives physical link loss",
+            "one virtual DualSense Edge",
+        ):
+            with self.subTest(stale_claim=stale_claim):
+                self.assertNotIn(stale_claim, current_guides)
+
+    def test_virtual_bluetooth_report_contract_is_documented(self):
+        protocol = (ROOT / "VADER3P_PROTOCOL.md").read_text()
+        for term in (
+            "78-byte input and output reports",
+            "CRC-32/ISO-HDLC",
+            "domain byte `A1`",
+            "CRC domain `A2`",
+            "CRC domain `A3`",
+            "Feature `09` carries the virtual identity",
+            "Linux",
+            "SDL",
+            "provisional",
+            "tickle reports",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, protocol)
 
     def test_migration_guide_documents_owned_legacy_cleanup_safely(self):
         readme = (ROOT / "README.md").read_text()

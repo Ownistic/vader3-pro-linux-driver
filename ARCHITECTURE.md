@@ -1,9 +1,10 @@
 # Architecture
 
-`vader3p-steam` translates a Bluetooth DInput Vader 3 Pro into one virtual
-DualSense Edge. The physical transport is Bluetooth. The virtual device uses
-Sony's USB report layout through Linux UHID so that `hid-playstation` can expose
-its controls and motion sensors to Steam.
+`vader3p-steam` discovers eligible connected Bluetooth DInput Vader 3 Pro
+controllers and creates one independent virtual DualSense Edge for each. The
+Bluetooth virtual device uses Sony's full Bluetooth report contract through
+Linux UHID so that `hid-playstation` can expose its controls and motion sensors
+to Steam.
 
 See the [README](README.md) for installation and
 [VADER3P_PROTOCOL.md](VADER3P_PROTOCOL.md) for packet layouts.
@@ -12,20 +13,25 @@ See the [README](README.md) for installation and
 
 ```mermaid
 flowchart TB
-    controller["Vader 3 Pro: Bluetooth DInput"]
+    controllers["Vader 3 Pro controllers: Bluetooth DInput"]
     subgraph runtime["vader3p-steam"]
-        hid["hidraw + HID parser"]
-        ble["BLE worker + NUS parsers"]
+        manager["Discovery and session manager"]
+        sessions["Independent per-controller sessions"]
+        hid["Verified hidraw + HID parser"]
+        ble["Per-controller BLE worker + NUS parsers"]
         selection["Input selection + stale-state handling"]
-        reports["Edge report encoding"]
+        reports["Bluetooth Edge report encoding"]
         feedback["Host feedback decoder"]
     end
     uhid["/dev/uhid"]
     kernel["hid-playstation"]
     steam["Steam"]
 
-    controller -->|HID input| hid
-    controller -->|NUS notifications via BlueZ| ble
+    controllers -->|HID input| hid
+    controllers -->|NUS notifications via BlueZ| ble
+    manager --> sessions
+    sessions --> hid
+    sessions --> ble
     hid --> selection
     ble -->|NUS controls| selection
     ble -->|Motion sample and age| reports
@@ -37,11 +43,12 @@ flowchart TB
     kernel -.-> uhid
     uhid -.-> feedback
     feedback -.->|Desired motor levels| ble
-    ble -.->|NUS rumble via BlueZ| controller
+    ble -.->|NUS rumble via BlueZ| controllers
 ```
 
-UHID is the only backend. There is no physical USB or dongle backend, legacy
-uinput device, or USB rumble fallback.
+Each eligible physical controller has its own UHID pad and worker. UHID is the
+only backend. There is no physical USB or dongle backend, legacy uinput device,
+or USB rumble fallback.
 
 ## Modules
 
@@ -53,23 +60,54 @@ uinput device, or USB rumble fallback.
 | [suppress.rs](driver/src/suppress.rs) | Optional, reversible grabs on associated evdev nodes |
 | [input.rs](driver/src/input.rs) | Ordinary Bluetooth HID input |
 | [nus_input.rs](driver/src/nus_input.rs), [motion.rs](driver/src/motion.rs) | NUS controls and two packed motion components |
-| [uhid_runtime.rs](driver/src/uhid_runtime.rs) | Main loop, input selection, stale state and reconnects |
+| [uhid_runtime.rs](driver/src/uhid_runtime.rs), [uhid_runtime/fleet.rs](driver/src/uhid_runtime/fleet.rs), [uhid_runtime/session.rs](driver/src/uhid_runtime/session.rs) | Fleet discovery, independent session threads, input selection, stale state and teardown |
 | [edge.rs](driver/src/edge.rs), [edge_report.rs](driver/src/edge_report.rs) | UHID lifecycle, virtual reports and host feedback |
 | [ble_worker.rs](driver/src/ble_worker.rs), [rumble.rs](driver/src/rumble.rs) | BlueZ sessions, motion activation and physical rumble |
 
 ## Discovery and startup
 
-The controller must be connected before startup. Discovery accepts a hidraw
-candidate on bus `0x05` with either the built-in `d7d7:0041` identity or the
+The manager scans for connected devices immediately and every second. It remains
+running when no eligible controller is connected, so later connections are
+discovered without restarting the daemon. Discovery accepts a hidraw candidate
+on Bluetooth bus `0x05` with either the built-in `d7d7:0041` identity or the
 recorded DInput descriptor. The observed `04b4:2412` device matches through its
-descriptor. Descriptor matches take priority over ID-only matches.
+descriptor.
 
 Bus 5 does not establish the physical transport: a forwarded dongle can also
 appear on that bus. Descriptor matching does not add dongle support.
 
-The main thread opens the physical device, attempts any configured evdev grabs,
-and creates the virtual pad. It starts a separate BLE worker when rumble or
-motion is enabled. Blocking D-Bus calls stay off the main input loop.
+The manager only scans, starts, signals and reaps sessions. Each controller
+session runs its own input, virtual-pad and 4 ms reporting loop, attempts verified
+evdev grabs, and starts a separate BLE worker when rumble or motion is enabled.
+Basic input does not wait for a BlueZ lookup. Blocking D-Bus calls stay off the
+manager and other controllers' input loops.
+All sessions use the same rumble and motion settings; there are no per-controller
+configuration overrides.
+If a session's BLE worker cannot start, only that session is retired. It closes
+its virtual pad on its own thread while holding its lease through the close;
+other sessions continue.
+
+For each candidate, the daemon verifies the full remote address from `HID_UNIQ`
+against the opened hidraw device, its device number, inode, raw identity and
+sysfs topology. It also verifies opened evdev identity before grabbing. It does
+not fall back to `HID_PHYS` or the first candidate. Ambiguous identities are
+skipped or retired only for the affected identity; incomplete scans do not imply
+that healthy controllers were removed.
+
+The virtual Bluetooth MAC is derived from all six physical address octets using
+a domain-separated SHA-256 digest, then marked local and unicast. The same value
+identifies that controller's UHID `uniq`, `phys` and reversed pairing feature
+bytes. The truncated digest is not collision-free; detected collisions are
+rejected.
+
+Physical and virtual identity leases use `flock` files in the private
+`$XDG_RUNTIME_DIR/vader3p-steam` directory, or `/run/user/<uid>/vader3p-steam`
+when `XDG_RUNTIME_DIR` is unset. The runtime directory must be private and owned
+by the effective user. The application directory is mode `0700` and lease files
+are mode `0600`; symlink following is disabled. Lock files are never unlinked.
+This excludes cooperating processes running as the same user, not legacy or
+otherwise uncooperative daemons or processes running under another UID. Stop and
+verify the old service during migration before starting the new daemon.
 
 ## Input selection and timing
 
@@ -119,8 +157,10 @@ behave differently.
 
 ## BlueZ trust boundary
 
-The BLE worker discovers exactly one connected, resolved device matching the
-configured Bluetooth address, plus its NUS RX and TX characteristics.
+Each session's BLE worker discovers exactly one connected, resolved BlueZ device
+matching that session's verified physical address, plus its NUS RX and TX
+characteristics. The optional `bluetooth_address` configuration value filters
+which sessions the manager starts; it is not required for BLE operation.
 
 Before resolving `org.bluez`, the worker installs an authenticated name-owner
 watch. It binds subscriptions and method calls to BlueZ's resolved unique bus
@@ -144,32 +184,35 @@ Worker D-Bus calls have a 500 ms timeout. Polling uses 20 ms, link checks run
 about once a second, and session retry backoff is 500 ms. Scheduling and blocking
 calls can delay these intervals.
 
-On a detected physical disconnect, the runtime invalidates input and feedback,
-releases physical handles and grabs, and sends neutral state. The virtual UHID
-pad remains alive. Reattach attempts run every second and reacquire the physical
-handles and grabs.
+On source EOF, HUP, read failure, or confirmed removal in a complete scan, the
+manager signals only that controller's session. The session requests zero
+feedback, destroys its virtual pad on its own thread, and releases its physical
+handles and grabs. A reconnect creates a fresh session with the same derived
+virtual identity. Other sessions and the manager continue running. A requested
+virtual-device removal is not proof that Steam refreshed its device list.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Starting
     Starting --> Attached: Physical device opened and UHID created
     Starting --> [*]: Startup fails
-    Attached --> Reconnecting: Physical read or poll failure
-    Reconnecting --> Reconnecting: Retry after 1 second
-    Reconnecting --> Attached: Physical device reattached
+    Attached --> Retiring: Physical read failure or confirmed removal
+    Retiring --> Removed: Pad destroyed on session thread
+    Removed --> Attached: Manager discovers a reconnect; new session
     Attached --> Stopped: Shutdown
-    Reconnecting --> Stopped: Shutdown
+    Retiring --> Stopped: Shutdown
     Stopped --> [*]
-    note right of Reconnecting
-        UHID stays alive.
-        Input and feedback are neutralized.
+    note right of Retiring
+        Only this controller is retired.
+        Its pad is destroyed on its session thread.
     end note
 ```
 
 Host CLOSE/STOP and shutdown request zero feedback. Cleanup attempts a physical
-stop when its generation permits. Shutdown waits up to 1.2 seconds for the BLE
-worker before detaching it. These are best-effort requests, not proof of motor
-behavior. UHID is destroyed when the daemon exits.
+stop when its generation permits. Global shutdown signals every session first,
+then uses one 1.2-second grace period for all sessions and retiring workers.
+These are best-effort requests, not proof of motor behavior. A retiring session
+or BLE worker retains its identity lease until its actual cleanup ends.
 
 Physical `EVIOCGRAB` blocks event delivery to other evdev readers. It does not
 prevent device enumeration or hidraw access. Steam can still list the physical
@@ -183,9 +226,17 @@ Create `~/.config/vader3p-steam/config.toml`, or pass `--config PATH`. The defau
 location respects `$XDG_CONFIG_HOME`; without it, `$HOME/.config` is used. If
 neither variable exists, the base is `/etc`. Missing keys use defaults.
 
-If the selected file does not exist, defaults are still validated. Defaults alone
-require an address because rumble defaults to enabled. An unreadable or malformed
-existing file is an error.
+When you omit `--config`, the daemon reads the conventional file if it exists.
+If that file is absent, the daemon validates and uses defaults. An explicit
+`--config PATH` must name an existing file; a missing file is an error and does
+not fall back to defaults. An unreadable or malformed existing file is also an
+error. No address is required: an unset `bluetooth_address` selects all eligible
+connected controllers. When set, `bluetooth_address` must be one canonical
+six-octet Bluetooth address and restricts operation to that single controller,
+regardless of whether rumble or motion is enabled.
+
+A broken symlink at the conventional path is an error, not an absent file. Valid
+symlinks load their target normally.
 
 | Key | Default | Behavior |
 | --- | --- | --- |
@@ -193,7 +244,7 @@ existing file is an error.
 | `product_id` | `0x0041` | Compatibility metadata and diagnostic text; does not change discovery. |
 | `virtual_name` | `Flydigi Vader 3 Pro (UHID DualSense Edge)` | UHID name: 1–127 UTF-8 bytes, without NUL. |
 | `rumble` | `true` | Forward host feedback over Bluetooth NUS. |
-| `bluetooth_address` | unset | Six colon-separated hexadecimal octets; required when rumble or motion is enabled. |
+| `bluetooth_address` | unset | Optional six-octet Bluetooth address filter; unset selects all eligible controllers, while a valid value selects one. Validated even when rumble and motion are disabled. |
 | `poll_ms` | `4` | Compatibility-only value; has no effect on the UHID runtime. |
 | `suppress_physical` | `true` | Attempt physical evdev grabs; failures produce warnings. |
 | `log_level` | `info` | `error`, `warn`, `info`, `debug`, or `trace`, case-insensitive; unrecognized values use `info`. |

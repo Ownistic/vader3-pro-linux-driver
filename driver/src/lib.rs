@@ -5,7 +5,9 @@ pub mod config;
 pub mod device;
 pub mod edge;
 pub mod edge_report;
+pub mod identity;
 pub mod input;
+pub mod lease;
 pub mod motion;
 pub mod nus_input;
 mod quick_access;
@@ -62,8 +64,7 @@ impl Logger {
 
 macro_rules! log_warn { ($l:expr, $($arg:tt)*) => { if $l.level() >= $crate::Level::Warn { $l.log($crate::Level::Warn, &format!($($arg)*)); } }; }
 macro_rules! log_info { ($l:expr, $($arg:tt)*) => { if $l.level() >= $crate::Level::Info { $l.log($crate::Level::Info, &format!($($arg)*)); } }; }
-macro_rules! log_debug { ($l:expr, $($arg:tt)*) => { if $l.level() >= $crate::Level::Debug { $l.log($crate::Level::Debug, &format!($($arg)*)); } }; }
-pub(crate) use {log_debug, log_info, log_warn};
+pub(crate) use {log_info, log_warn};
 
 pub fn run(config_path: Option<&Path>) -> Result<()> {
     let cfg = config::Config::load_or_default(config_path)?;
@@ -79,7 +80,7 @@ pub fn run(config_path: Option<&Path>) -> Result<()> {
             handle_signal as *const () as libc::sighandler_t,
         );
     }
-    uhid_runtime::EdgeRuntime::start(cfg)?
+    uhid_runtime::ControllerFleet::new(cfg)?
         .run(|| !RUNNING.load(std::sync::atomic::Ordering::SeqCst))
 }
 

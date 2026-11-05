@@ -6,6 +6,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::device;
+use crate::identity::MacAddress;
 
 /// Runtime configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,10 +20,7 @@ pub struct Config {
     pub virtual_name: String,
     /// Enable rumble forwarding from host feedback to the controller.
     pub rumble: bool,
-    /// Bluetooth address of the controller, needed for GATT writes.
-    ///
-    /// Required for Bluetooth rumble: the NUS characteristic is reached through
-    /// BlueZ by device path, and there is no hidraw route.
+    /// Optional Bluetooth address filter; absent means all eligible controllers.
     pub bluetooth_address: Option<String>,
     /// Compatibility-only setting; the UHID runtime does not use this value.
     pub poll_ms: u64,
@@ -118,28 +116,27 @@ impl Config {
 
     /// Check cross-field constraints before opening devices or starting workers.
     pub fn validate(&self) -> Result<()> {
+        if self.virtual_name.is_empty()
+            || self.virtual_name.len() > 127
+            || self.virtual_name.as_bytes().contains(&0)
+        {
+            bail!("virtual_name must be 1..=127 bytes without NUL");
+        }
         if !(1..=1000).contains(&self.motion.stale_ms) {
             bail!("motion.stale_ms must be in 1..=1000");
         }
         if self.motion.enabled && self.motion.scale == 0 {
             bail!("motion.scale must be nonzero when motion is enabled");
         }
-        if self.rumble || self.motion.enabled {
-            let valid = self.bluetooth_address.as_deref().is_some_and(|addr| {
-                let parts: Vec<_> = addr.split(':').collect();
-                parts.len() == 6
-                    && parts
-                        .iter()
-                        .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
-            });
-            if !valid {
-                bail!("uhid motion or rumble requires a valid bluetooth_address");
-            }
+        if let Some(address) = &self.bluetooth_address {
+            address
+                .parse::<MacAddress>()
+                .context("invalid bluetooth_address filter")?;
         }
         Ok(())
     }
 
-    /// Load the given path if it exists, else return defaults.
+    /// Load an explicit path, or the conventional path if present.
     ///
     /// With no path given, the conventional location is tried before falling back
     /// to defaults. Without this, a config written where the documentation says to
@@ -152,10 +149,11 @@ impl Config {
 
     fn load_resolved(explicit: Option<&Path>, default: &Path) -> Result<Self> {
         match explicit {
-            Some(p) if p.exists() => Self::load(p),
-            Some(_) => Ok(Self::default()),
-            None if default.exists() => Self::load(default),
-            None => Ok(Self::default()),
+            Some(p) => Self::load(p),
+            None => match std::fs::symlink_metadata(default) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+                _ => Self::load(default),
+            },
         }
     }
 
@@ -187,7 +185,7 @@ mod tests {
         assert!(c.motion.invert_x);
         assert!(c.motion.invert_y);
         assert_eq!(c.motion.axis_scales(), [-1, -1]);
-        assert!(c.validate().is_err()); // Rumble requires an address.
+        assert!(c.validate().is_ok());
     }
 
     #[test]
@@ -215,7 +213,7 @@ mod tests {
         assert_eq!(motion.axis_scales(), [32768, -32768]);
         motion.invert_x = false;
         assert_eq!(motion.axis_scales(), [-32768, -32768]);
-        assert!(c.validate().is_err());
+        assert!(c.validate().is_ok());
         c.bluetooth_address = Some("AA:BB:CC:DD:EE:FF".into());
         assert!(c.validate().is_ok());
         c.motion.scale = 0;
@@ -233,14 +231,94 @@ mod tests {
         assert!(c.validate().is_err());
         c.motion.enabled = false;
         c.rumble = false;
-        assert!(c.validate().is_ok());
+        assert!(c.validate().is_err());
     }
 
     #[test]
     fn load_rejects_invalid_cross_field_configuration() {
         let file = tempfile::NamedTempFile::new().unwrap();
-        std::fs::write(file.path(), "[motion]\nenabled = true\n").unwrap();
+        std::fs::write(file.path(), "[motion]\nenabled = true\nscale = 0\n").unwrap();
         assert!(Config::load(file.path()).is_err());
+    }
+
+    #[test]
+    fn auto_filter_name_and_missing_config_validation() {
+        let mut cfg = Config::default();
+        assert!(cfg.validate().is_ok());
+        cfg.motion.enabled = true;
+        assert!(cfg.validate().is_ok());
+        for value in ["12:34:56:78:9A:BC", "12:34:56:78:9a:bc"] {
+            cfg.bluetooth_address = Some(value.into());
+            assert!(cfg.validate().is_ok());
+        }
+        cfg.rumble = false;
+        cfg.motion.enabled = false;
+        for value in [
+            "bad",
+            "00:00:00:00:00:00",
+            "FF:FF:FF:FF:FF:FF",
+            " 12:34:56:78:9A:BC",
+        ] {
+            cfg.bluetooth_address = Some(value.into());
+            assert!(cfg.validate().is_err());
+        }
+        cfg.bluetooth_address = None;
+        for name in [
+            String::new(),
+            "x".repeat(128),
+            "bad\0name".into(),
+            "é".repeat(64),
+        ] {
+            cfg.virtual_name = name;
+            assert!(cfg.validate().is_err());
+        }
+        cfg.virtual_name = "x".repeat(127);
+        assert!(cfg.validate().is_ok());
+        let temp = tempfile::tempdir().unwrap();
+        let absent = temp.path().join("absent");
+        assert!(Config::load_resolved(None, &absent)
+            .unwrap()
+            .validate()
+            .is_ok());
+        let missing_error = Config::load_or_default(Some(&absent)).unwrap_err();
+        assert!(format!("{missing_error:#}").contains(&absent.display().to_string()));
+        assert!(Config::load_resolved(Some(temp.path()), &absent).is_err()); // directory, not a file
+        std::fs::write(&absent, "[invalid TOML").unwrap();
+        assert!(Config::load_resolved(Some(&absent), &absent).is_err());
+        assert!(Config::load_resolved(None, &absent).is_err());
+        std::fs::write(&absent, "bluetooth_address = '12:34:56:78:9a:bc'\n").unwrap();
+        assert!(Config::load_resolved(Some(&absent), &absent)
+            .unwrap()
+            .validate()
+            .is_ok());
+        assert!(Config::load_resolved(None, &absent)
+            .unwrap()
+            .validate()
+            .is_ok());
+    }
+
+    #[test]
+    fn default_config_symlink_must_resolve_and_is_loaded() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let default = temp.path().join("config.toml");
+        let target = temp.path().join("target.toml");
+        assert!(Config::load_resolved(None, &default)
+            .unwrap()
+            .bluetooth_address
+            .is_none());
+        symlink(&target, &default).unwrap();
+        let error = Config::load_resolved(None, &default).unwrap_err();
+        assert!(format!("{error:#}").contains(&default.display().to_string()));
+        assert!(Config::load_resolved(Some(&default), &default).is_err());
+        std::fs::write(&target, "bluetooth_address = '12:34:56:78:9A:BC'\n").unwrap();
+        assert_eq!(
+            Config::load_resolved(None, &default)
+                .unwrap()
+                .bluetooth_address
+                .as_deref(),
+            Some("12:34:56:78:9A:BC")
+        );
     }
 
     #[test]

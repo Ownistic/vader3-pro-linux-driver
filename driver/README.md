@@ -2,7 +2,8 @@
 
 See the [project README](../README.md) for build, permissions, configuration,
 limitations and Steam visibility. This daemon supports Bluetooth DInput and
-presents one DualSense Edge UHID device.
+presents one independent Bluetooth DualSense Edge UHID device for each
+eligible connected controller.
 
 ## Layout
 
@@ -15,9 +16,12 @@ presents one DualSense Edge UHID device.
 - `rumble.rs`: Bluetooth NUS frames; no USB fallback.
 - `suppress.rs`: reversible evdev grabs, not device removal.
 
-The UHID device survives physical link loss. The daemon neutralizes state on
-disconnect and reattaches to the target; this behavior still needs hardware
-acceptance. The `examples/` diagnostics are not proof of device behavior.
+The manager waits when no eligible controller is connected and detects later
+connections. On controller loss, its session requests removal of that virtual
+pad; a reconnect starts a fresh pad with the same identity. Other sessions
+continue independently. Physical multi-controller behavior still needs hardware
+acceptance. The `examples/` diagnostics are not proof of physical-device or Steam
+behavior.
 Historical generic-uinput measurements do not measure this implementation.
 
 Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,

@@ -1,17 +1,14 @@
-//! Virtual DualSense Edge USB control plane over Linux UHID.
-//!
-//! The descriptor provides a USB-shaped report layout to the virtual UHID device.
+//! Virtual Bluetooth DualSense Edge control plane over Linux UHID.
 
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 
 use crate::edge_report::{self, Feedback, MotionSample};
+use crate::identity::MacAddress;
 use crate::input::State;
 use crate::quick_access::QuickAccess;
 
@@ -20,11 +17,11 @@ const DATA_MAX: usize = 4096;
 // Accommodate CREATE2 with a maximal descriptor, including spare ABI room.
 const EVENT_SIZE: usize = 4380;
 const DESCRIPTOR: &[u8] = &[
-    0x05, 0x01, 0x09, 0x05, 0xa1, 0x01, 0x85, 0x01, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08, 0x95,
-    0x06, 0x09, 0x30, 0x09, 0x31, 0x09, 0x33, 0x09, 0x34, 0x09, 0x32, 0x09, 0x35, 0x81, 0x02, 0x06,
-    0x00, 0xff, 0x09, 0x01, 0x95, 0x39, 0x81, 0x02, 0x85, 0x02, 0x09, 0x02, 0x95, 0x3e, 0x91, 0x02,
-    0x85, 0x05, 0x09, 0x05, 0x95, 0x28, 0xb1, 0x02, 0x85, 0x09, 0x09, 0x09, 0x95, 0x13, 0xb1, 0x02,
-    0x85, 0x20, 0x09, 0x20, 0x95, 0x3f, 0xb1, 0x02, 0xc0,
+    0x05, 0x01, 0x09, 0x05, 0xa1, 0x01, // Gamepad application
+    0x06, 0x00, 0xff, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08, 0x85, 0x31, 0x09, 0x31, 0x95, 0x4d,
+    0x81, 0x02, 0x09, 0x31, 0x95, 0x4d, 0x91, 0x02, 0x85, 0x05, 0x09, 0x05, 0x95, 0x28, 0xb1, 0x02,
+    0x85, 0x09, 0x09, 0x09, 0x95, 0x13, 0xb1, 0x02, 0x85, 0x20, 0x09, 0x20, 0x95, 0x3f, 0xb1, 0x02,
+    0xc0,
 ];
 
 fn put16(b: &mut [u8], at: usize, value: u16) {
@@ -45,15 +42,19 @@ fn event(kind: u32, len: usize) -> Vec<u8> {
     out
 }
 
-fn create_message(name: &str) -> Result<Vec<u8>> {
+fn create_message(name: &str, mac: MacAddress) -> Result<Vec<u8>> {
     if name.is_empty() || name.len() > 127 || name.as_bytes().contains(&0) {
         bail!("UHID name must be 1..=127 bytes without NUL");
     }
     let mut out = event(11, 280 + DESCRIPTOR.len());
     out[4..4 + name.len()].copy_from_slice(name.as_bytes());
+    let phys = format!("vader3p-steam/{}", mac.compact());
+    let uniq = mac.to_string();
+    out[132..132 + phys.len()].copy_from_slice(phys.as_bytes());
+    out[196..196 + uniq.len()].copy_from_slice(uniq.as_bytes());
     put16(&mut out, 260, DESCRIPTOR.len() as u16);
-    put16(&mut out, 262, 3); // BUS_USB, linux/input.h
-                             // Linux hid-ids.h: Sony DualSense Edge USB identity.
+    put16(&mut out, 262, 5); // BUS_BLUETOOTH, linux/input.h
+                             // Linux hid-ids.h: Sony DualSense Edge identity.
     put32(&mut out, 264, 0x054c);
     put32(&mut out, 268, 0x0df2);
     put32(&mut out, 272, 0x0100);
@@ -61,25 +62,7 @@ fn create_message(name: &str) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn address() -> [u8; 6] {
-    static SERIAL: AtomicU64 = AtomicU64::new(0);
-    static SEED: OnceLock<u64> = OnceLock::new();
-    let seed = *SEED.get_or_init(|| {
-        let time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
-        time ^ (u64::from(std::process::id()) << 17)
-    });
-    let value = seed.wrapping_add(SERIAL.fetch_add(1, Ordering::Relaxed));
-    let mut bytes = value.to_le_bytes();
-    // Pairing address is stored in reverse order; set local/unicast bits on
-    // its most significant octet. This is an identifier, not a credential.
-    bytes[5] = (bytes[5] & 0xfc) | 0x02;
-    bytes[..6].try_into().unwrap()
-}
-
-fn feature(number: u8, mac: [u8; 6]) -> Option<Vec<u8>> {
+fn feature(number: u8, mac: MacAddress) -> Option<Vec<u8>> {
     let mut data = vec![
         0;
         match number {
@@ -107,8 +90,9 @@ fn feature(number: u8, mac: [u8; 6]) -> Option<Vec<u8>> {
             data[at + 2..at + 4].copy_from_slice(&(-8192i16).to_le_bytes());
         }
     } else if number == 9 {
-        data[1..7].copy_from_slice(&mac);
+        data[1..7].copy_from_slice(&mac.reversed_pairing_bytes());
     }
+    edge_report::bluetooth_append_crc(0xa3, &mut data);
     Some(data)
 }
 
@@ -125,7 +109,7 @@ fn write_event(writer: &mut impl Write, data: &[u8]) -> Result<()> {
 pub struct EdgePad {
     file: File,
     name: String,
-    mac: [u8; 6],
+    mac: MacAddress,
     created: bool,
     started: bool,
     opened: bool,
@@ -137,8 +121,25 @@ pub struct EdgePad {
 }
 
 impl EdgePad {
-    pub fn create(name: &str) -> Result<Self> {
-        let message = create_message(name)?;
+    #[cfg(test)]
+    pub(crate) fn from_test_file(file: File, physical: MacAddress) -> Self {
+        Self {
+            file,
+            name: "test".into(),
+            mac: physical.virtual_address(),
+            created: true,
+            started: false,
+            opened: false,
+            quick_access: QuickAccess::default(),
+            origin: Instant::now(),
+            sequence: 0,
+            levels: None,
+            output_count: 0,
+        }
+    }
+    pub fn create(name: &str, physical: MacAddress) -> Result<Self> {
+        let mac = physical.virtual_address();
+        let message = create_message(name, mac)?;
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -149,7 +150,7 @@ impl EdgePad {
         Ok(Self {
             file,
             name: name.to_owned(),
-            mac: address(),
+            mac,
             created: true,
             started: false,
             opened: false,
@@ -164,6 +165,11 @@ impl EdgePad {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    #[must_use]
+    pub fn virtual_address(&self) -> MacAddress {
+        self.mac
     }
 
     /// Whether the kernel has delivered START without a subsequent STOP.
@@ -210,7 +216,7 @@ impl EdgePad {
         let state = self
             .quick_access
             .compose(state, controls_valid, self.opened, elapsed);
-        let report = edge_report::input_report(
+        let report = edge_report::bluetooth_input_report(
             &state,
             sample,
             scale,
@@ -300,9 +306,11 @@ impl EdgePad {
                 Ok(Some((0, 0)))
             }
             6 => {
-                let report = output_report(message)?;
+                let Some(report) = output_report(message)? else {
+                    return Ok(None);
+                };
                 self.output_count = self.output_count.saturating_add(1);
-                let update = edge_report::feedback(report, self.levels.is_some());
+                let update = edge_report::bluetooth_feedback(report, self.levels.is_some());
                 let next = match update {
                     Some(Feedback::Levels(l, r)) => Some((l, r)),
                     Some(Feedback::Stop) => Some((0, 0)),
@@ -311,12 +319,11 @@ impl EdgePad {
                 let changed = next.is_some_and(|v| Some(v).filter(|v| *v != (0, 0)) != self.levels);
                 if self.output_count <= 16 || changed {
                     eprintln!(
-                        "UHID output #{} len={} id={:02x} bytes[1..=5]={:02x?} byte[39]={:02x}",
+                        "UHID output #{} len={} id={:02x} header={:02x?}",
                         self.output_count,
                         report.len(),
                         report[0],
-                        &report[1..6],
-                        report[39]
+                        &report[1..3]
                     );
                 }
                 if let Some(v) = next {
@@ -342,21 +349,21 @@ impl Drop for EdgePad {
     }
 }
 
-fn output_report(message: &[u8]) -> Result<&[u8]> {
+fn output_report(message: &[u8]) -> Result<Option<&[u8]>> {
     if message.len() < 4103 {
         bail!("short UHID OUTPUT event");
     }
     let size = usize::from(get16(message, 4100));
-    if size > DATA_MAX || !matches!(size, 48 | 63) || message[4102] != 1 || message[4] != 2 {
-        bail!(
-            "unsupported UHID OUTPUT report type={} size={size}",
-            message[4102]
-        );
+    if size > DATA_MAX {
+        bail!("oversized UHID OUTPUT report: {size}");
     }
-    Ok(&message[4..4 + size])
+    if size != 78 || message[4102] != 1 || message[4] != 0x31 {
+        return Ok(None);
+    }
+    Ok(Some(&message[4..4 + size]))
 }
 
-fn control_reply(message: &[u8], mac: [u8; 6]) -> Result<Vec<u8>> {
+fn control_reply(message: &[u8], mac: MacAddress) -> Result<Vec<u8>> {
     if message.len() < 10 {
         bail!("short UHID control request");
     }
@@ -404,6 +411,13 @@ mod tests {
     use std::os::fd::{FromRawFd, IntoRawFd};
     use std::os::unix::net::UnixDatagram;
 
+    fn test_mac() -> MacAddress {
+        "12:34:56:78:9A:BC"
+            .parse::<MacAddress>()
+            .unwrap()
+            .virtual_address()
+    }
+
     fn test_pad() -> (EdgePad, UnixDatagram) {
         let (device, host) = UnixDatagram::pair().unwrap();
         let file = unsafe { File::from_raw_fd(device.into_raw_fd()) };
@@ -411,7 +425,7 @@ mod tests {
             EdgePad {
                 file,
                 name: "test".into(),
-                mac: [0; 6],
+                mac: test_mac(),
                 created: true,
                 started: false,
                 opened: false,
@@ -431,7 +445,7 @@ mod tests {
         state: State,
         valid: bool,
         ms: u64,
-    ) -> [u8; 64] {
+    ) -> [u8; 78] {
         pad.send_at(
             &state,
             valid,
@@ -442,8 +456,11 @@ mod tests {
             Duration::from_millis(ms),
         )
         .unwrap();
-        let mut packet = [0; 70];
-        assert_eq!(host.recv(&mut packet).unwrap(), 70);
+        let mut packet = [0; 84];
+        assert_eq!(host.recv(&mut packet).unwrap(), 84);
+        assert_eq!(get16(&packet, 4), 78);
+        assert_eq!(packet[6], 0x31);
+        assert!(edge_report::bluetooth_verify_crc(0xa1, &packet[6..]));
         packet[6..].try_into().unwrap()
     }
 
@@ -455,8 +472,8 @@ mod tests {
         }
     }
 
-    fn chord(report: [u8; 64]) -> (u8, u8) {
-        (report[8] & 0x20, report[10] & 1)
+    fn chord(report: [u8; 78]) -> (u8, u8) {
+        (report[9] & 0x20, report[11] & 1)
     }
 
     #[test]
@@ -613,9 +630,9 @@ mod tests {
                             }
                     )
                 );
-                assert_eq!(report[8] & 0x40, 0x40);
-                assert_eq!(report[9] & 1, 1);
-                assert_eq!(report[10] & 0xf6, 0xf6);
+                assert_eq!(report[9] & 0x40, 0x40);
+                assert_eq!(report[10] & 1, 1);
+                assert_eq!(report[11] & 0xf6, 0xf6);
             }
             let report = wire(&mut pad, &host, state(0), true, 202);
             assert_eq!(chord(report), (0, 0));
@@ -686,7 +703,7 @@ mod tests {
     #[test]
     fn feature_control_preserves_request_and_report_ids() {
         for (number, size) in [(5, 41), (9, 20), (0x20, 64)] {
-            let reply = control_reply(&request(9, number, 0), [1, 2, 3, 4, 5, 6]).unwrap();
+            let reply = control_reply(&request(9, number, 0), test_mac()).unwrap();
             assert_eq!(get32(&reply, 0), 10);
             assert_eq!(get32(&reply, 4), 0x12345678);
             assert_eq!(get16(&reply, 8), 0);
@@ -694,7 +711,7 @@ mod tests {
             assert_eq!(reply[12], number);
         }
         for (number, ty) in [(5, 1), (0xff, 0)] {
-            let reply = control_reply(&request(9, number, ty), [0; 6]).unwrap();
+            let reply = control_reply(&request(9, number, ty), test_mac()).unwrap();
             assert_eq!(get32(&reply, 4), 0x12345678);
             assert_eq!(get16(&reply, 8), libc::EOPNOTSUPP as u16);
             assert_eq!(get16(&reply, 10), 0);
@@ -703,29 +720,29 @@ mod tests {
 
     #[test]
     fn set_and_malformed_control_requests() {
-        assert!(control_reply(&[0; 3], [0; 6]).is_err());
-        assert!(control_reply(&event(13, 10), [0; 6]).is_err());
+        assert!(control_reply(&[0; 3], test_mac()).is_err());
+        assert!(control_reply(&event(13, 10), test_mac()).is_err());
         let mut req = request(13, 5, 0);
-        let reply = control_reply(&req, [0; 6]).unwrap();
+        let reply = control_reply(&req, test_mac()).unwrap();
         assert_eq!(
             (get32(&reply, 0), get32(&reply, 4), get16(&reply, 8)),
             (14, 0x12345678, libc::EOPNOTSUPP as u16)
         );
         put16(&mut req, 10, 1);
         assert_eq!(
-            get16(&control_reply(&req, [0; 6]).unwrap(), 8),
+            get16(&control_reply(&req, test_mac()).unwrap(), 8),
             libc::EINVAL as u16
         );
         put16(&mut req, 10, 4097);
         assert_eq!(
-            get16(&control_reply(&req, [0; 6]).unwrap(), 8),
+            get16(&control_reply(&req, test_mac()).unwrap(), 8),
             libc::EINVAL as u16
         );
     }
 
     #[test]
     fn calibration_and_unique_local_addresses() {
-        let c = feature(5, [0; 6]).unwrap();
+        let c = feature(5, test_mac()).unwrap();
         let val = |at| i16::from_le_bytes([c[at], c[at + 1]]) as i32;
         for at in [7, 11, 15] {
             let span = val(at) - val(at + 2);
@@ -735,33 +752,45 @@ mod tests {
         for at in [23, 27, 31] {
             assert_eq!(val(at) - val(at + 2), 16384);
         }
-        let a = address();
-        let b = address();
+        let a = test_mac();
+        let b = "01:23:45:67:89:AB"
+            .parse::<MacAddress>()
+            .unwrap()
+            .virtual_address();
         assert_ne!(a, b);
-        assert_eq!(a[5] & 3, 2);
-        assert_eq!(&feature(9, a).unwrap()[1..7], &a);
+        assert_eq!(a.bytes()[0] & 3, 2);
+        assert_eq!(&feature(9, a).unwrap()[1..7], &a.reversed_pairing_bytes());
+        // Independent Python zlib CRC values for this fabricated feature data.
+        for (number, expected) in [
+            (5, [0x7d, 0x56, 0xdc, 0x78]),
+            (9, [0xef, 0x1a, 0x51, 0xf5]),
+            (0x20, [0xcf, 0xd5, 0x4c, 0x5d]),
+        ] {
+            let feature = feature(number, a).unwrap();
+            assert_eq!(&feature[feature.len() - 4..], &expected);
+        }
     }
 
     #[test]
     fn output_bounds_and_types() {
         let mut b = event(6, EVENT_SIZE);
         assert!(output_report(&b[..4102]).is_err());
-        b[4] = 2;
+        b[4] = 0x31;
         b[4102] = 1;
-        for size in [48, 63] {
+        put16(&mut b, 4100, 78);
+        assert_eq!(output_report(&b).unwrap().unwrap().len(), 78);
+        for size in [0, 2, 48, 63, 77, 79] {
             put16(&mut b, 4100, size);
-            assert_eq!(output_report(&b).unwrap().len(), size as usize);
+            assert!(output_report(&b).unwrap().is_none());
         }
-        for size in [0, 47, 64, 4097] {
-            put16(&mut b, 4100, size);
-            assert!(output_report(&b).is_err());
-        }
-        put16(&mut b, 4100, 48);
-        b[4102] = 0;
+        put16(&mut b, 4100, 4097);
         assert!(output_report(&b).is_err());
+        put16(&mut b, 4100, 78);
+        b[4102] = 0;
+        assert!(output_report(&b).unwrap().is_none());
         b[4102] = 1;
         b[4] = 3;
-        assert!(output_report(&b).is_err());
+        assert!(output_report(&b).unwrap().is_none());
     }
 
     #[test]
@@ -770,7 +799,7 @@ mod tests {
         let mut pad = EdgePad {
             file,
             name: "test".into(),
-            mac: [0; 6],
+            mac: test_mac(),
             created: true,
             started: false,
             opened: false,
@@ -787,12 +816,27 @@ mod tests {
         pad.send(&State::default(), true, None, [1, 1], true, Duration::ZERO)
             .unwrap();
         let mut b = event(6, EVENT_SIZE);
-        put16(&mut b, 4100, 48);
+        put16(&mut b, 4100, 78);
         b[4102] = 1;
-        b[4] = 2;
-        b[5] = 1;
-        b[8] = 255;
+        b[4] = 0x31;
+        b[5] = 0;
+        b[6] = 0x10;
+        b[7] = 1;
+        b[10] = 255;
+        edge_report::bluetooth_append_crc(0xa2, &mut b[4..82]);
         assert_eq!(pad.handle(&b).unwrap(), Some((250, 0)));
+        for (size, kind, id) in [(2, 1, 0x31), (48, 1, 0x02), (78, 1, 0x02), (78, 0, 0x31)] {
+            let mut unrelated = b.clone();
+            put16(&mut unrelated, 4100, size);
+            unrelated[4102] = kind;
+            unrelated[4] = id;
+            assert_eq!(pad.handle(&unrelated).unwrap(), None);
+            assert_eq!(pad.levels, Some((250, 0)));
+        }
+        b[10] ^= 1;
+        assert_eq!(pad.handle(&b).unwrap(), None);
+        assert_eq!(pad.levels, Some((250, 0)));
+        b[10] ^= 1;
         pad.stop_feedback();
         assert_eq!(pad.levels, None);
         pad.handle(&b).unwrap();
@@ -807,15 +851,73 @@ mod tests {
     #[test]
     fn create_buffer_and_short_writes() {
         assert_eq!(EVENT_SIZE, 4380);
-        let c = create_message("Edge").unwrap();
+        let c = create_message("Edge", test_mac()).unwrap();
         assert_eq!(
             (get32(&c, 0), get32(&c, 264), get32(&c, 268)),
             (11, 0x054c, 0x0df2)
         );
         assert_eq!(&c[280..], DESCRIPTOR);
+        assert_eq!(get16(&c, 262), 5);
+        assert_eq!(&c[132..158], b"vader3p-steam/D20076FC8378");
+        assert_eq!(&c[196..213], b"D2:00:76:FC:83:78");
         assert_eq!(get16(&c, 260) as usize, DESCRIPTOR.len());
-        assert!(create_message(&"x".repeat(128)).is_err());
+        assert!(create_message(&"x".repeat(128), test_mac()).is_err());
+        assert!(create_message("", test_mac()).is_err());
+        assert!(create_message("bad\0name", test_mac()).is_err());
         assert!(write_event(&mut &mut [0u8; 2][..], &[1, 2, 3]).is_err());
+    }
+
+    #[test]
+    fn bluetooth_descriptor_and_identity_are_stable_and_consistent() {
+        let mut id = 0;
+        let mut count = 0;
+        let mut reports = Vec::new();
+        let mut pos = 0;
+        while pos < DESCRIPTOR.len() {
+            let prefix = DESCRIPTOR[pos];
+            let size = match prefix & 3 {
+                3 => 4,
+                n => usize::from(n),
+            };
+            if size == 1 {
+                let value = DESCRIPTOR[pos + 1];
+                match prefix {
+                    0x85 => id = value,
+                    0x95 => count = value,
+                    0x81 | 0x91 | 0xb1 => reports.push((prefix, id, count)),
+                    _ => {}
+                }
+            }
+            pos += 1 + size;
+        }
+        assert_eq!(
+            reports,
+            [
+                (0x81, 0x31, 77),
+                (0x91, 0x31, 77),
+                (0xb1, 5, 40),
+                (0xb1, 9, 19),
+                (0xb1, 0x20, 63)
+            ]
+        );
+        let first = test_mac();
+        let second = "01:23:45:67:89:AB"
+            .parse::<MacAddress>()
+            .unwrap()
+            .virtual_address();
+        let c1 = create_message("Edge", first).unwrap();
+        let c1_again = create_message("Edge", test_mac()).unwrap();
+        let c2 = create_message("Edge", second).unwrap();
+        assert_eq!(c1, c1_again);
+        assert_ne!(&c1[196..260], &c2[196..260]);
+        assert_eq!(
+            &feature(9, first).unwrap()[1..7],
+            &first.reversed_pairing_bytes()
+        );
+        assert_eq!(
+            &feature(9, second).unwrap()[1..7],
+            &second.reversed_pairing_bytes()
+        );
     }
 
     #[test]
@@ -831,7 +933,7 @@ mod tests {
         let mut pad = EdgePad {
             file,
             name: "test".into(),
-            mac: [1; 6],
+            mac: test_mac(),
             created: true,
             started: false,
             opened: false,

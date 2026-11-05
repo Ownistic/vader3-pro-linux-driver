@@ -6,10 +6,13 @@
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use vader3p_steam::ble_worker::{ActivationState, BleWorker};
 use vader3p_steam::config::{Backend, Config};
+use vader3p_steam::identity::MacAddress;
+use vader3p_steam::lease::{ControllerLease, LeaseDirectory};
 use vader3p_steam::motion::RawMotion;
 
 struct Options {
@@ -99,11 +102,36 @@ fn run(options: Options) -> ExitCode {
         eprintln!("Error: config must opt in to uhid motion and include a Bluetooth address.");
         return ExitCode::FAILURE;
     }
-    let address = config.bluetooth_address.expect("checked above");
+    let address: MacAddress = match config
+        .bluetooth_address
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+    {
+        Some(address) => address,
+        None => {
+            eprintln!("Error: invalid Bluetooth address.");
+            return ExitCode::FAILURE;
+        }
+    };
+    let lease = match LeaseDirectory::open_default().and_then(|directory| {
+        ControllerLease::acquire(&directory, address, address.virtual_address())
+    }) {
+        Ok(lease) => Arc::new(lease),
+        Err(error) => {
+            eprintln!("Error: controller lease unavailable: {error:#}");
+            return ExitCode::FAILURE;
+        }
+    };
     println!(
         "BLE worker diagnostic; passive first, at most one selector attempt per subscription."
     );
-    let worker = BleWorker::start(address, true, false);
+    let worker = match BleWorker::start_scoped(lease, true, false) {
+        Ok(worker) => worker,
+        Err(error) => {
+            eprintln!("Error: could not start BLE worker: {error:#}");
+            return ExitCode::FAILURE;
+        }
+    };
     let assessment_deadline = Instant::now() + Duration::from_secs(10);
     let mut observation_deadline = None;
     let mut summary = RawSummary::default();
