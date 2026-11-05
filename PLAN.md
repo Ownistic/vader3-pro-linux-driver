@@ -1,8 +1,10 @@
 # Implementation plan
 
 Requirements remain in [PRD.md](PRD.md); current checkpoint and historical
-development record are in [PROGRESS.md](PROGRESS.md). The active cleanup scope
-is [UHID-only cleanup](docs/phases/02-uhid-only-cleanup.md).
+development record are in [PROGRESS.md](PROGRESS.md). The latest feature scope
+is [FN quick-access mapping](docs/phases/03-fn-quick-access.md), complete within
+its scope and verified in Game Mode. No follow-on phase is authorized. The prior
+[UHID-only cleanup](docs/phases/02-uhid-only-cleanup.md) is complete.
 
 The standalone Rust daemon now targets Bluetooth DInput and DualSense Edge UHID.
 The earlier generic-uinput implementation and its measurements are historical,

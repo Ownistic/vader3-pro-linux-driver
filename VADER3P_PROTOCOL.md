@@ -37,7 +37,7 @@ Offsets include the report ID. Bytes beyond the interpreted fields are ignored.
 | 9, low nibble | D-pad hat: `1` up, `3` right, `5` down, `7` left; other values decode as neutral |
 | 9, high nibble | A `10`, B `20`, X `40`, Y `80` |
 | 10 | LB `01`, RB `02`, LT flag `04`, RT flag `08`, Select `10`, Start `20`, L3 `40`, R3 `80` |
-| 11 | C `01`, Z `02`, M1 `04`, M2 `08`, M3 `10`, M4 `20` |
+| 11 | C `01`, Z `02`, M1 `04`, M2 `08`, M3 `10`, M4 `20`, FN `80` |
 | 12 | Home `80`; other bits ignored |
 | 13 | Left trigger level, `00`–`ff` |
 | 14 | Right trigger level, `00`–`ff` |
@@ -54,6 +54,8 @@ does not infer undocumented diagonal values.
 The [historical captures](docs/evidence/passive-dinput-abcz.md) record physical
 button checks and resting values. Captures, firmware interpretation and parser
 behavior are different forms of evidence.
+FN at HID byte 11 mask `80` is a [static correlation](docs/evidence/fn-button-static.md),
+not an ordinary HID hardware capture. Byte 12 mask `01` is not FN and is ignored.
 
 ## NUS input and motion
 
@@ -73,7 +75,7 @@ requires both parsers to accept the sample.
 | 4 | D-pad up `01`, right `02`, down `04`, left `08`; A `10`, B `20`, Select `40`, X `80` |
 | 5 | Y `01`, Start `02`, LB `04`, RB `08`, L3 `40`, R3 `80`; other bits ignored |
 | 6–7 | Left and right trigger levels |
-| 8 | Home `08`; other bits ignored |
+| 8 | FN `01`, Home `08`; other bits ignored |
 | 9 | C, Z, M1, M2, M3, M4 in bits 0–5 |
 | 10 | `00` for accepted input samples |
 | 11–13 | Two packed signed 12-bit motion components |
@@ -87,6 +89,8 @@ directly. D-pad directions are independent bits in this format.
 Physical X is byte 4 bit 7; Y is byte 5 bit 0. My passive button checks corrected
 an earlier swapped labeling. See the
 [NUS input evidence](docs/evidence/nus-input-prefix-static.md).
+My [FN capture](docs/evidence/fn-button-capture.md) observed byte 8 mask `01`;
+byte 9 mask `40` is ignored and does not represent FN.
 
 ### Motion packing
 
@@ -163,7 +167,14 @@ See [rumble.rs](driver/src/rumble.rs) and the
 ## Virtual DualSense Edge boundary
 
 The [virtual encoder](driver/src/edge_report.rs) generates a 64-byte report with
-ID `01`. Standard controls and the six extra buttons remain distinct. Extra
+ID `01`. FN triggers an experimental PS-only, PS + Cross, PS-only, release
+sequence, with minimum durations 100, 60 and 40 ms for the first three phases.
+PS (byte 10 mask `01`) and Cross (byte 8 mask `20`) are OR-composed with
+physical Home and A. The sequence targets Steam's Guide + A Quick Access
+shortcut. I verified a short tap and a two-second hold opening the sidebar
+without game launch or the main-menu popup on the
+[recorded candidate](docs/evidence/fn-quick-access-runtime.md).
+The six extra buttons remain independent. Extra
 buttons occupy byte 10: C `02`, Z `04`, M1 `10`, M2 `20`, M3 `40`, M4 `80`.
 Gyro X/Y occupy bytes 16–19 as little-endian signed 16-bit values; gyro Z is zero.
 

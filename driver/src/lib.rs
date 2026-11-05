@@ -8,6 +8,7 @@ pub mod edge_report;
 pub mod input;
 pub mod motion;
 pub mod nus_input;
+mod quick_access;
 pub mod rumble;
 pub mod suppress;
 pub mod uhid_runtime;

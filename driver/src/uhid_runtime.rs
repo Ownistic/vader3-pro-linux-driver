@@ -36,7 +36,8 @@ fn choose_input(
     stale: Duration,
     hid: Option<State>,
     previous: State,
-) -> (State, bool) {
+    previous_valid: bool,
+) -> (State, bool, bool) {
     if let Some((state, age)) = sample {
         *active = true;
         return (
@@ -46,12 +47,17 @@ fn choose_input(
                 State::default()
             },
             true,
+            age <= stale,
         );
     }
     if *active {
-        (State::default(), true)
+        (State::default(), true, false)
     } else {
-        (hid.unwrap_or(previous), false)
+        (
+            hid.unwrap_or(previous),
+            false,
+            hid.is_some() || previous_valid,
+        )
     }
 }
 
@@ -122,6 +128,7 @@ pub struct EdgeRuntime {
     physical: Option<PhysicalDevice>,
     grabs: Vec<ExclusiveGrab>,
     state: State,
+    controls_valid: bool,
     nus_active: bool,
     next_report: Instant,
     next_attach: Instant,
@@ -152,6 +159,7 @@ impl EdgeRuntime {
             physical: Some(physical),
             grabs,
             state: State::default(),
+            controls_valid: false,
             nus_active: false,
             next_report: now,
             next_attach: now + REATTACH_INTERVAL,
@@ -197,8 +205,8 @@ impl EdgeRuntime {
                 self.counters = Counters::default();
                 self.next_metrics = now + METRICS_INTERVAL;
             }
-            self.update_input(None);
-            if self.pad.started() && report_due(now, self.next_report, false) {
+            let changed = self.update_input(None);
+            if self.pad.started() && report_due(now, self.next_report, changed) {
                 self.send()?;
             } else if !self.pad.started() && now >= self.next_report {
                 self.next_report = now + REPORT_INTERVAL;
@@ -247,15 +255,22 @@ impl EdgeRuntime {
         } else {
             None
         };
-        let (state, nus) = choose_input(
+        let (state, nus, valid) = choose_input(
             &mut self.nus_active,
             sample,
             Duration::from_millis(self.cfg.motion.stale_ms),
             hid,
             self.state,
+            self.controls_valid,
         );
+        let valid = valid && self.physical.is_some();
+        let validity_changed = valid != self.controls_valid;
+        self.controls_valid = valid;
+        if !valid {
+            self.pad.cancel_quick_access();
+        }
         if state == self.state {
-            return false;
+            return validity_changed;
         }
         self.state = state;
         self.counters.changes += 1;
@@ -283,6 +298,7 @@ impl EdgeRuntime {
         };
         self.pad.send(
             &self.state,
+            self.controls_valid,
             sample,
             self.cfg.motion.axis_scales(),
             self.cfg.motion.swap_xy,
@@ -302,7 +318,9 @@ impl EdgeRuntime {
             worker.set_connected(false);
         }
         self.pad.stop_feedback();
+        self.pad.cancel_quick_access();
         self.state = State::default();
+        self.controls_valid = false;
         self.nus_active = false;
         self.physical = None;
         self.grabs.clear();
@@ -316,10 +334,13 @@ impl Drop for EdgeRuntime {
             worker.set_rumble(0, 0);
         }
         self.pad.stop_feedback();
+        self.pad.cancel_quick_access();
         self.state = State::default();
+        self.controls_valid = false;
         if self.pad.started() {
             let _ = self.pad.send(
                 &self.state,
+                false,
                 None,
                 self.cfg.motion.axis_scales(),
                 self.cfg.motion.swap_xy,
@@ -381,11 +402,11 @@ mod tests {
         };
         let limit = Duration::from_millis(100);
         assert_eq!(
-            choose_input(&mut active, None, limit, Some(hid), State::default()).0,
+            choose_input(&mut active, None, limit, Some(hid), State::default(), false).0,
             hid
         );
         assert_eq!(
-            choose_input(&mut active, Some((nus, limit)), limit, Some(hid), hid).0,
+            choose_input(&mut active, Some((nus, limit)), limit, Some(hid), hid, true).0,
             nus
         );
         assert_eq!(
@@ -394,19 +415,209 @@ mod tests {
                 Some((nus, limit + Duration::from_nanos(1))),
                 limit,
                 Some(hid),
-                nus
+                nus,
+                true,
             )
             .0,
             State::default()
         );
         assert_eq!(
-            choose_input(&mut active, None, limit, Some(hid), nus).0,
+            choose_input(&mut active, None, limit, Some(hid), nus, true).0,
             State::default()
         );
         active = false;
         assert_eq!(
-            choose_input(&mut active, None, limit, Some(hid), State::default()).0,
+            choose_input(&mut active, None, limit, Some(hid), State::default(), false).0,
             hid
         );
+    }
+
+    #[test]
+    fn neutral_input_validity_changes_even_when_state_does_not() {
+        let mut active = false;
+        let neutral = State::default();
+        let limit = Duration::from_millis(100);
+        let fresh = choose_input(
+            &mut active,
+            Some((neutral, limit)),
+            limit,
+            None,
+            neutral,
+            false,
+        );
+        let stale = choose_input(
+            &mut active,
+            Some((neutral, limit + Duration::from_nanos(1))),
+            limit,
+            None,
+            neutral,
+            true,
+        );
+        let missing = choose_input(&mut active, None, limit, Some(neutral), neutral, false);
+        assert_eq!(fresh, (neutral, true, true));
+        assert_eq!(stale, (neutral, true, false));
+        assert_eq!(missing, (neutral, true, false));
+        active = false;
+        assert_eq!(
+            choose_input(&mut active, None, limit, None, neutral, true),
+            (neutral, false, true)
+        );
+    }
+
+    #[test]
+    fn first_observed_fn_requires_release_on_initial_attach_and_reconnect() {
+        use crate::input::button;
+        use crate::quick_access::QuickAccess;
+
+        let limit = Duration::from_millis(100);
+        let mut sequence = QuickAccess::default();
+        let mut active = false;
+        let mut previous = State::default();
+        let mut valid = false;
+        let mut hid_frame = [0u8; input::REPORT_LEN];
+        hid_frame[0] = input::REPORT_ID;
+        hid_frame[11] = 0x80;
+        let down = input::parse(&hid_frame).unwrap();
+        hid_frame[11] = 0;
+        let up = input::parse(&hid_frame).unwrap();
+        assert_eq!(up, State::default());
+
+        for connection in 0..2 {
+            if connection != 0 {
+                // Mirror disconnect's invalidation and sequencer cancellation.
+                sequence.cancel();
+                active = false;
+                previous = State::default();
+                valid = false;
+            }
+            let mut emit = |hid: Option<State>, ms: u64| {
+                let (state, _, next_valid) =
+                    choose_input(&mut active, None, limit, hid, previous, valid);
+                let changed = state != previous || next_valid != valid;
+                previous = state;
+                valid = next_valid;
+                let composed = sequence.compose(&state, valid, true, Duration::from_millis(ms));
+                let report = crate::edge_report::input_report(
+                    &composed,
+                    None,
+                    [1, 1],
+                    false,
+                    Duration::ZERO,
+                    Duration::ZERO,
+                    0,
+                );
+                (valid, changed, report[8] & 0x20, report[10] & 1)
+            };
+            assert_eq!(emit(None, 0), (false, false, 0, 0));
+            assert_eq!(emit(Some(down), 1), (true, true, 0, 0));
+            assert_eq!(emit(None, 101), (true, false, 0, 0));
+            assert_eq!(emit(Some(up), 102), (true, true, 0, 0));
+            assert_eq!(emit(Some(down), 103), (true, true, 0, 1));
+            assert_eq!(emit(None, 202), (true, false, 0, 1));
+            assert_eq!(emit(None, 203), (true, false, 0x20, 1));
+            assert!(down.button(button::FN));
+        }
+    }
+
+    #[test]
+    fn real_neutral_report_changes_validity_and_arms_even_if_state_unchanged() {
+        let mut active = false;
+        let mut sequence = crate::quick_access::QuickAccess::default();
+        let neutral = State::default();
+        let limit = Duration::from_millis(100);
+        let selected = choose_input(&mut active, None, limit, None, neutral, false);
+        assert_eq!(selected, (neutral, false, false));
+        let selected = choose_input(&mut active, None, limit, Some(neutral), neutral, false);
+        assert_eq!(selected, (neutral, false, true));
+        sequence.compose(&selected.0, selected.2, true, Duration::ZERO);
+        let down = State {
+            buttons: 1 << input::button::FN,
+            ..neutral
+        };
+        let selected = choose_input(&mut active, None, limit, Some(down), neutral, true);
+        let staged = sequence.compose(&selected.0, selected.2, true, Duration::from_millis(1));
+        let wire = crate::edge_report::input_report(
+            &staged,
+            None,
+            [1, 1],
+            false,
+            Duration::ZERO,
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!((wire[8] & 0x20, wire[10] & 1), (0, 1));
+    }
+
+    #[test]
+    fn first_fresh_nus_fn_is_not_an_arming_release() {
+        let mut active = false;
+        let mut sequence = crate::quick_access::QuickAccess::default();
+        let neutral = State::default();
+        let down = State {
+            buttons: 1 << input::button::FN,
+            ..neutral
+        };
+        let (selected, _, valid) = choose_input(
+            &mut active,
+            Some((down, Duration::ZERO)),
+            Duration::from_millis(100),
+            None,
+            neutral,
+            false,
+        );
+        assert!(valid);
+        let staged = sequence.compose(&selected, valid, true, Duration::from_secs(1));
+        let wire = crate::edge_report::input_report(
+            &staged,
+            None,
+            [1, 1],
+            false,
+            Duration::ZERO,
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!((wire[8] & 0x20, wire[10] & 1), (0, 0));
+    }
+
+    #[test]
+    fn fn_shortcut_is_neutral_after_stale_or_disconnect() {
+        let mut frame = [0u8; 20];
+        frame[18] = 0xfe;
+        frame[8] = 1;
+        let pressed = crate::nus_input::parse(&frame).unwrap();
+        let limit = Duration::from_millis(100);
+        let mut active = false;
+        let encode = |state: &State| {
+            crate::edge_report::input_report(
+                state,
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::ZERO,
+                0,
+            )
+        };
+        let fresh = choose_input(
+            &mut active,
+            Some((pressed, Duration::ZERO)),
+            limit,
+            None,
+            State::default(),
+            false,
+        );
+        assert!(fresh.2);
+        assert_eq!((encode(&fresh.0)[8], encode(&fresh.0)[10]), (8, 0));
+        for sample in [Some((pressed, limit + Duration::from_nanos(1))), None] {
+            let (neutral, _, valid) =
+                choose_input(&mut active, sample, limit, Some(pressed), pressed, true);
+            assert!(!valid);
+            assert_eq!(neutral, State::default());
+            assert_eq!((encode(&neutral)[8], encode(&neutral)[10]), (8, 0));
+        }
+        // disconnect() resets both the retained state and NUS selection.
+        active = false;
+        let neutral = choose_input(&mut active, None, limit, None, State::default(), false).0;
+        assert_eq!((encode(&neutral)[8], encode(&neutral)[10]), (8, 0));
     }
 }

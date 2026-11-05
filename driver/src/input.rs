@@ -18,7 +18,7 @@
 //! | 9 low nibble | D-pad hat: 1=up 3=right 5=down 7=left, 0=neutral |
 //! | 9 high nibble | A `0x10`, B `0x20`, X `0x40`, Y `0x80` |
 //! | 10 | LB `0x01`, RB `0x02`, LT `0x04`, RT `0x08`, Select `0x10`, Start `0x20`, L3 `0x40`, R3 `0x80` |
-//! | 11 | C `0x01`, Z `0x02`, M1 `0x04`, M2 `0x08`, M3 `0x10`, M4 `0x20` |
+//! | 11 | C `0x01`, Z `0x02`, M1 `0x04`, M2 `0x08`, M3 `0x10`, M4 `0x20`, FN `0x80` (static correlation) |
 //! | 12 | Home `0x80` |
 //! | 13 | left trigger analog level |
 //! | 14 | right trigger analog level |
@@ -53,9 +53,10 @@ pub mod button {
     pub const DPAD_RIGHT: usize = 12;
     pub const DPAD_DOWN: usize = 13;
     pub const DPAD_LEFT: usize = 14;
+    pub const FN: usize = 15;
 
     /// Number of standard (non-extra) buttons.
-    pub const STANDARD_COUNT: usize = 15;
+    pub const STANDARD_COUNT: usize = 16;
 }
 
 /// Canonical indices for the six buttons the project must expose independently.
@@ -88,6 +89,7 @@ pub const STANDARD_NAMES: [&str; button::STANDARD_COUNT] = [
     "dpad_right",
     "dpad_down",
     "dpad_left",
+    "fn",
 ];
 
 /// Names in canonical order for the six independent extras.
@@ -218,6 +220,10 @@ pub fn parse(report: &[u8]) -> Result<State, ParseError> {
 
     if b12 & 0x80 != 0 {
         buttons |= 1 << button::HOME;
+    }
+    // HID FN position is a static correlation; see docs/evidence/fn-button-static.md.
+    if b11 & 0x80 != 0 {
+        buttons |= 1 << button::FN;
     }
 
     // Byte 11: the six independent extras.
@@ -379,6 +385,30 @@ mod tests {
         let s = parse(&r).unwrap();
         assert!(s.button(button::HOME));
         assert_eq!(s.buttons.count_ones(), 1);
+    }
+
+    #[test]
+    fn fn_is_independent_of_home_and_extras() {
+        let mut r = neutral();
+        r[11] = 0x80;
+        let s = parse(&r).unwrap();
+        assert_eq!(s.buttons, 1 << button::FN);
+        assert!(s.button(15));
+        assert!(!s.button(16));
+        assert_eq!(STANDARD_NAMES[15], "fn");
+        assert_eq!(s.extras, 0);
+        for mask in [1, 2, 4, 8, 16, 32, 0x3f] {
+            r[11] = 0x80 | mask;
+            r[12] = 0x80;
+            let s = parse(&r).unwrap();
+            assert_eq!(s.buttons, (1 << button::FN) | (1 << button::HOME));
+            assert_eq!(s.extras, mask);
+        }
+        r = neutral();
+        r[12] = 0x01;
+        assert_eq!(parse(&r).unwrap().buttons, 0);
+        r[12] = 0;
+        assert_eq!(parse(&r).unwrap().buttons, 0);
     }
 
     #[test]

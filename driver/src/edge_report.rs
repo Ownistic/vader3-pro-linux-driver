@@ -167,6 +167,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bare_fn_does_not_affect_encoded_report() {
+        let encode = |state: &State| {
+            input_report(
+                state,
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::ZERO,
+                0,
+            )
+        };
+        for buttons in [
+            0,
+            1 << button::A,
+            1 << button::HOME,
+            (1 << button::A) | (1 << button::HOME),
+            (1 << button::B) | (1 << button::LB) | (1 << button::DPAD_UP),
+        ] {
+            for extras in [0, 1, 2, 4, 8, 16, 32, 0x3f] {
+                let released = State {
+                    buttons,
+                    extras,
+                    ..State::default()
+                };
+                let held = State {
+                    buttons: buttons | (1 << button::FN),
+                    ..released
+                };
+                let before = encode(&released);
+                let during = encode(&held);
+                assert_eq!(during[8], before[8]);
+                assert_eq!(during[9], before[9]);
+                assert_eq!(during[10], before[10]);
+                assert_eq!(encode(&released), before);
+            }
+        }
+    }
+
+    #[test]
     fn individual_controls_are_distinct_and_extras_release() {
         let neutral = input_report(
             &State::default(),
@@ -178,7 +218,7 @@ mod tests {
             0,
         );
         let mut states = std::collections::HashSet::new();
-        for i in 0..button::STANDARD_COUNT {
+        for i in 0..button::FN {
             let state = State {
                 buttons: 1 << i,
                 ..State::default()

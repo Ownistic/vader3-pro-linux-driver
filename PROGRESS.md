@@ -1,5 +1,38 @@
 # Progress
 
+## Current: FN quick-access mapping complete within scope
+
+The [FN feature](docs/phases/03-fn-quick-access.md) was implemented from baseline `main` at
+`a0b40bf`. FN uses a bounded ordered
+Guide + A pulse, preserving the existing controls. NUS byte 8 mask `01` is
+hardware-observed; HID byte 11 mask `80` remains a static correlation.
+
+Release SHA-256:
+`7ec608e76c8c66a8f97a334b88b24372ea1360be1a85038c970ac34f6ba31c56`.
+Driver-input manifest:
+`1ee4574e63a3534f9b9c872f476111bbd81b3d7ae80f859a5fb41dac052d45d0`.
+Independent verification passed 102 Rust and 38 Python tests, formatting, strict
+Clippy, Cargo check for all targets, release build and diff check. Bounded review
+and scoped convergence passed the same saved inputs without blockers. Rust
+analyzer is unavailable; Cargo supplied compiler validation.
+
+On the Legion Go with a game highlighted, I confirmed a quick FN tap opens only
+the right-hand sidebar. A two-second hold also opens it once, without game
+launch, repetition or the main-menu popup. The earlier simultaneous-chord A leak
+and the intermediate reconnect-validity preflight failure remain recorded in
+[runtime evidence](docs/evidence/fn-quick-access-runtime.md).
+
+The successful executable is active as transient
+`vader3p-uhid-test-fn-sequenced.service`, from
+`/tmp/flydigi-fn-a0b40bf/vader3p-steam-fn-sequenced`, using the unchanged private
+configuration copy. There is no runtime cutoff or boot-enabled installation.
+The original v4 executable/configuration are preserved; the failing candidate is
+stopped. No installed binary or Steam setting changed. The explicit request to commit and
+push was received after the independent gates passed; this records the commit
+request only, not a completed push. Final documentation checks pass: all 38 Python tests and
+`git diff --check`. No further work is required for this scoped feature; broader
+hardware acceptance, including pitch correction, is not claimed by this test.
+
 ## Current: UHID-only cleanup and local main integration complete
 
 I authorized removing the old backend and merging `feat/uhid-emulation`

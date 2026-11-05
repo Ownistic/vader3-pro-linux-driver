@@ -14,6 +14,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::edge_report::{self, Feedback, MotionSample};
 use crate::input::State;
+use crate::quick_access::QuickAccess;
 
 // Packed native-endian ABI described by linux/uhid.h. HID fields are LE.
 const DATA_MAX: usize = 4096;
@@ -128,6 +129,8 @@ pub struct EdgePad {
     mac: [u8; 6],
     created: bool,
     started: bool,
+    opened: bool,
+    quick_access: QuickAccess,
     origin: Instant,
     sequence: u8,
     levels: Option<(u8, u8)>,
@@ -150,6 +153,8 @@ impl EdgePad {
             mac: address(),
             created: true,
             started: false,
+            opened: false,
+            quick_access: QuickAccess::default(),
             origin: Instant::now(),
             sequence: 0,
             levels: None,
@@ -172,21 +177,47 @@ impl EdgePad {
     pub fn send(
         &mut self,
         state: &State,
+        controls_valid: bool,
         sample: Option<MotionSample>,
         scale: [i32; 2],
         swap_xy: bool,
         stale_after: Duration,
     ) -> Result<()> {
-        if !self.created || !self.started {
-            bail!("Edge UHID device has not started");
-        }
-        let report = edge_report::input_report(
+        self.send_at(
             state,
+            controls_valid,
             sample,
             scale,
             swap_xy,
             stale_after,
             self.origin.elapsed(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn send_at(
+        &mut self,
+        state: &State,
+        controls_valid: bool,
+        sample: Option<MotionSample>,
+        scale: [i32; 2],
+        swap_xy: bool,
+        stale_after: Duration,
+        elapsed: Duration,
+    ) -> Result<()> {
+        if !self.created || !self.started {
+            bail!("Edge UHID device has not started");
+        }
+        let state = self
+            .quick_access
+            .compose(state, controls_valid, self.opened, elapsed);
+        let report = edge_report::input_report(
+            &state,
+            sample,
+            scale,
+            swap_xy,
+            stale_after,
+            elapsed,
             self.sequence,
         );
         let mut message = event(12, 6 + report.len());
@@ -226,6 +257,10 @@ impl EdgePad {
         self.levels = None;
     }
 
+    pub(crate) fn cancel_quick_access(&mut self) {
+        self.quick_access.cancel();
+    }
+
     /// Destroy once. A failed write is returned; dropping the file still closes
     /// the UHID device, and repeated calls do not send another destroy.
     pub fn destroy(&mut self) -> Result<()> {
@@ -234,6 +269,8 @@ impl EdgePad {
         }
         self.created = false;
         self.started = false;
+        self.opened = false;
+        self.cancel_quick_access();
         self.stop_feedback();
         write_event(&mut self.file, &event(1, 4))
     }
@@ -247,10 +284,19 @@ impl EdgePad {
                 self.started = true;
                 Ok(None)
             }
+            4 => {
+                self.opened = true;
+                self.cancel_quick_access();
+                Ok(None)
+            }
             3 | 5 => {
                 if get32(message, 0) == 3 {
                     self.started = false;
                 }
+                if get32(message, 0) == 5 {
+                    self.opened = false;
+                }
+                self.cancel_quick_access();
                 self.stop_feedback();
                 Ok(Some((0, 0)))
             }
@@ -355,6 +401,280 @@ fn control_reply(message: &[u8], mac: [u8; 6]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::button;
+    use std::os::fd::{FromRawFd, IntoRawFd};
+    use std::os::unix::net::UnixDatagram;
+
+    fn test_pad() -> (EdgePad, UnixDatagram) {
+        let (device, host) = UnixDatagram::pair().unwrap();
+        let file = unsafe { File::from_raw_fd(device.into_raw_fd()) };
+        (
+            EdgePad {
+                file,
+                name: "test".into(),
+                mac: [0; 6],
+                created: true,
+                started: false,
+                opened: false,
+                quick_access: QuickAccess::default(),
+                origin: Instant::now(),
+                sequence: 0,
+                levels: None,
+                output_count: 0,
+            },
+            host,
+        )
+    }
+
+    fn wire(
+        pad: &mut EdgePad,
+        host: &UnixDatagram,
+        state: State,
+        valid: bool,
+        ms: u64,
+    ) -> [u8; 64] {
+        pad.send_at(
+            &state,
+            valid,
+            None,
+            [1, 1],
+            false,
+            Duration::ZERO,
+            Duration::from_millis(ms),
+        )
+        .unwrap();
+        let mut packet = [0; 70];
+        assert_eq!(host.recv(&mut packet).unwrap(), 70);
+        packet[6..].try_into().unwrap()
+    }
+
+    fn state(buttons: u16) -> State {
+        State {
+            buttons,
+            extras: 0x3f,
+            ..State::default()
+        }
+    }
+
+    fn chord(report: [u8; 64]) -> (u8, u8) {
+        (report[8] & 0x20, report[10] & 1)
+    }
+
+    #[test]
+    fn emitted_short_tap_boundaries_and_long_hold_do_not_repeat() {
+        let (mut pad, host) = test_pad();
+        let up = state(0);
+        let down = state(1 << button::FN);
+        assert!(pad
+            .send_at(
+                &up,
+                true,
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::ZERO
+            )
+            .is_err());
+        pad.handle(&event(4, 4)).unwrap();
+        pad.handle(&event(2, 4)).unwrap();
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 0)), (0, 0));
+        assert_eq!(chord(wire(&mut pad, &host, up, true, 1)), (0, 0));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 2)), (0, 1));
+        assert_eq!(chord(wire(&mut pad, &host, up, true, 101)), (0, 1));
+        assert_eq!(chord(wire(&mut pad, &host, up, true, 102)), (0x20, 1));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 161)), (0x20, 1));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 162)), (0, 1));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 201)), (0, 1));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 202)), (0, 0));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 1000)), (0, 0));
+        assert_eq!(chord(wire(&mut pad, &host, up, true, 1001)), (0, 0));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 1002)), (0, 1));
+    }
+
+    #[test]
+    fn before_start_and_after_destroy_never_emit_a_pulse() {
+        let (mut pad, host) = test_pad();
+        let down = state(1 << button::FN);
+        pad.handle(&event(4, 4)).unwrap();
+        assert!(pad
+            .send_at(
+                &down,
+                true,
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::from_secs(10)
+            )
+            .is_err());
+        pad.handle(&event(2, 4)).unwrap();
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 20_000)), (0, 0));
+        wire(&mut pad, &host, state(0), true, 20_001);
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 20_002)), (0, 1));
+        pad.destroy().unwrap();
+        let mut event = [0; 4];
+        assert_eq!(host.recv(&mut event).unwrap(), 4);
+        assert!(pad
+            .send_at(
+                &down,
+                true,
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::from_secs(30)
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn emitted_phases_never_skip_on_large_jumps_and_ignore_represses() {
+        let (mut pad, host) = test_pad();
+        pad.handle(&event(2, 4)).unwrap();
+        pad.handle(&event(4, 4)).unwrap();
+        let up = state(0);
+        let down = state(1 << button::FN);
+        wire(&mut pad, &host, up, true, 0);
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 1)), (0, 1));
+        assert_eq!(chord(wire(&mut pad, &host, up, true, 10000)), (0x20, 1));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 20000)), (0, 1));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 30000)), (0, 0));
+        assert_eq!(chord(wire(&mut pad, &host, down, true, 40000)), (0, 0));
+    }
+
+    #[test]
+    fn invalid_and_host_lifecycle_cancel_and_require_fresh_release() {
+        for phase in [0, 100, 160] {
+            for action in [0, 3, 5, 9] {
+                let (mut pad, host) = test_pad();
+                pad.handle(&event(2, 4)).unwrap();
+                pad.handle(&event(4, 4)).unwrap();
+                let up = state(0);
+                let down = state(1 << button::FN);
+                wire(&mut pad, &host, up, true, 0);
+                wire(&mut pad, &host, down, true, 1);
+                if phase >= 100 {
+                    wire(&mut pad, &host, down, true, 101);
+                }
+                if phase >= 160 {
+                    wire(&mut pad, &host, down, true, 161);
+                }
+                match action {
+                    0 => {
+                        assert_eq!(chord(wire(&mut pad, &host, up, false, 200)), (0, 0));
+                    }
+                    3 => {
+                        pad.handle(&event(3, 4)).unwrap();
+                        pad.handle(&event(2, 4)).unwrap();
+                    }
+                    5 => {
+                        pad.handle(&event(5, 4)).unwrap();
+                        assert_eq!(chord(wire(&mut pad, &host, down, true, 200)), (0, 0));
+                        pad.handle(&event(4, 4)).unwrap();
+                    }
+                    _ => pad.cancel_quick_access(),
+                }
+                assert_eq!(chord(wire(&mut pad, &host, down, true, 300)), (0, 0));
+                assert_eq!(chord(wire(&mut pad, &host, up, true, 301)), (0, 0));
+                assert_eq!(chord(wire(&mut pad, &host, down, true, 302)), (0, 1));
+            }
+        }
+    }
+
+    #[test]
+    fn physical_controls_are_preserved_through_every_phase() {
+        for physical in [
+            0,
+            1 << button::A,
+            1 << button::HOME,
+            (1 << button::A) | (1 << button::HOME),
+        ] {
+            let (mut pad, host) = test_pad();
+            pad.handle(&event(2, 4)).unwrap();
+            pad.handle(&event(4, 4)).unwrap();
+            let base = physical | (1 << button::B) | (1 << button::LB);
+            wire(&mut pad, &host, state(base), true, 0);
+            for (ms, synthetic) in [(1, (0, 1)), (101, (0x20, 1)), (161, (0, 1)), (201, (0, 0))] {
+                let report = wire(&mut pad, &host, state(base | (1 << button::FN)), true, ms);
+                assert_eq!(
+                    chord(report),
+                    (
+                        synthetic.0
+                            | if physical & (1 << button::A) != 0 {
+                                0x20
+                            } else {
+                                0
+                            },
+                        synthetic.1
+                            | if physical & (1 << button::HOME) != 0 {
+                                1
+                            } else {
+                                0
+                            }
+                    )
+                );
+                assert_eq!(report[8] & 0x40, 0x40);
+                assert_eq!(report[9] & 1, 1);
+                assert_eq!(report[10] & 0xf6, 0xf6);
+            }
+            let report = wire(&mut pad, &host, state(0), true, 202);
+            assert_eq!(chord(report), (0, 0));
+        }
+    }
+
+    #[test]
+    fn physical_a_and_home_can_change_during_pulse() {
+        let (mut pad, host) = test_pad();
+        pad.handle(&event(2, 4)).unwrap();
+        pad.handle(&event(4, 4)).unwrap();
+        let fn_bit = 1 << button::FN;
+        wire(&mut pad, &host, state(0), true, 0);
+        assert_eq!(
+            chord(wire(
+                &mut pad,
+                &host,
+                state(fn_bit | (1 << button::A)),
+                true,
+                1
+            )),
+            (0x20, 1)
+        );
+        assert_eq!(
+            chord(wire(
+                &mut pad,
+                &host,
+                state(fn_bit | (1 << button::HOME)),
+                true,
+                101
+            )),
+            (0x20, 1)
+        );
+        assert_eq!(
+            chord(wire(
+                &mut pad,
+                &host,
+                state(fn_bit | (1 << button::A)),
+                true,
+                161
+            )),
+            (0x20, 1)
+        );
+        assert_eq!(
+            chord(wire(
+                &mut pad,
+                &host,
+                state(fn_bit | (1 << button::HOME)),
+                true,
+                201
+            )),
+            (0, 1)
+        );
+        assert_eq!(
+            chord(wire(&mut pad, &host, state(fn_bit), true, 202)),
+            (0, 0)
+        );
+    }
 
     fn request(kind: u32, number: u8, report_type: u8) -> Vec<u8> {
         let mut b = event(kind, 12);
@@ -454,16 +774,18 @@ mod tests {
             mac: [0; 6],
             created: true,
             started: false,
+            opened: false,
+            quick_access: QuickAccess::default(),
             origin: Instant::now(),
             sequence: 0,
             levels: None,
             output_count: 0,
         };
         assert!(pad
-            .send(&State::default(), None, [1, 1], true, Duration::ZERO)
+            .send(&State::default(), true, None, [1, 1], true, Duration::ZERO)
             .is_err());
         pad.handle(&event(2, 4)).unwrap();
-        pad.send(&State::default(), None, [1, 1], true, Duration::ZERO)
+        pad.send(&State::default(), true, None, [1, 1], true, Duration::ZERO)
             .unwrap();
         let mut b = event(6, EVENT_SIZE);
         put16(&mut b, 4100, 48);
@@ -513,6 +835,8 @@ mod tests {
             mac: [1; 6],
             created: true,
             started: false,
+            opened: false,
+            quick_access: QuickAccess::default(),
             origin: Instant::now(),
             sequence: 0,
             levels: None,

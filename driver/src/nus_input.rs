@@ -28,6 +28,7 @@ pub fn parse(data: &[u8]) -> Option<State> {
         (5, 64, button::L3),
         (5, 128, button::R3),
         (8, 8, button::HOME),
+        (8, 1, button::FN),
     ] {
         if data[byte] & mask != 0 {
             buttons |= 1 << index;
@@ -74,6 +75,7 @@ mod tests {
             (5, 64, button::L3),
             (5, 128, button::R3),
             (8, 8, button::HOME),
+            (8, 1, button::FN),
         ];
         let mut all = frame();
         for (byte, mask, index) in mappings {
@@ -93,7 +95,7 @@ mod tests {
         }
         all[9] = 0x3f;
         let s = parse(&all).unwrap();
-        assert_eq!(s.buttons.count_ones(), 15);
+        assert_eq!(s.buttons.count_ones(), 16);
         assert_eq!(s.extras, 0x3f);
         for bits in [3, 6, 12, 9] {
             let mut f = frame();
@@ -121,6 +123,26 @@ mod tests {
             assert_eq!(report[8], 8 | wire);
         }
     }
+
+    #[test]
+    fn fn_combines_with_each_extra_and_home_and_releases() {
+        for mask in [1, 2, 4, 8, 16, 32, 0x3f] {
+            let mut f = frame();
+            f[8] = 0x09;
+            f[9] = mask;
+            let state = parse(&f).unwrap();
+            assert_eq!(state.buttons, (1 << button::FN) | (1 << button::HOME));
+            assert_eq!(state.extras, mask);
+            f[8] = 0x08;
+            let released = parse(&f).unwrap();
+            assert_eq!(released.buttons, 1 << button::HOME);
+            assert_eq!(released.extras, mask);
+        }
+        let mut f = frame();
+        f[9] = 0x40;
+        let state = parse(&f).unwrap();
+        assert_eq!((state.buttons, state.extras), (0, 0));
+    }
     #[test]
     fn axes_triggers_unknowns_and_validation() {
         let mut f = frame();
@@ -128,7 +150,7 @@ mod tests {
         f[6] = 1;
         f[7] = 255;
         f[5] = 0x30;
-        f[8] = 0xf7;
+        f[8] = 0xf6;
         f[9] = 0xc0;
         f[14..18].fill(0xff);
         let s = parse(&f).unwrap();

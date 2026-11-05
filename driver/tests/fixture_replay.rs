@@ -59,7 +59,7 @@ fn fixture_reports_are_all_parseable() {
         let state =
             input::parse(raw).unwrap_or_else(|e| panic!("report {idx} failed to parse: {e}"));
         // A parse must produce a state whose bits fit the declared button count.
-        assert!(state.buttons < (1 << button::STANDARD_COUNT));
+        assert!(u32::from(state.buttons) < (1u32 << button::STANDARD_COUNT));
         assert!(state.extras < (1 << extra::COUNT));
     }
 }
