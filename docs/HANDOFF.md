@@ -1,6 +1,6 @@
 # Handoff — 2026-11-03
 
-## Latest: UHID-only cleanup verified; local merge pending
+## Latest: UHID-only cleanup verified and merged locally
 
 The owner authorized removing the legacy backend and merging into local `main`.
 The sole runtime now creates a DualSense Edge through `/dev/uhid`. Legacy uinput
@@ -25,8 +25,12 @@ been deployed or hardware-verified. The Legion Go's earlier v4 artifact and
 Steam ignore setting were not changed by this cleanup. Third gyro component,
 measured acceleration/calibration and other live acceptance gaps remain open.
 
-Next: commit the saved feature-branch changes, merge into local `main`, record
-actual integration commits and check the clean tree. No push or branch deletion.
+Local integration is complete. Research is committed as `b0ae40a`, the runtime
+cleanup as `4145716`, and the feature was merged into `main` at `eb5f0fe`.
+The merge tree exactly matched the reviewed feature tree. Both feature tip
+`4145716` and prior main `d45e356` are ancestors of local main; the tree was clean
+after merging. Nothing was pushed or deployed, and the feature branch remains.
+No cleanup or integration action remains; hardware acceptance is still open.
 Full criteria and gate history: [cleanup record](phases/02-uhid-only-cleanup.md).
 
 ## Latest: Steam shows only the emulated controller

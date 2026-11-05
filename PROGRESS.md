@@ -1,9 +1,9 @@
 # Progress
 
-## Current: UHID-only cleanup and main integration
+## Current: UHID-only cleanup and local main integration complete
 
 The owner authorized removing the old backend and merging `feat/uhid-emulation`
-into local `main`. The existing uncommitted runtime fixes and research are
+into local `main`. The previously uncommitted runtime fixes and research were
 preserved in checkpoint `before-uhid-only-cleanup`. Baseline at `cb7895a` plus
 those changes: `cargo test --all-targets` passed 145 tests. The saved scope and
 acceptance checks are in [the cleanup record](docs/phases/02-uhid-only-cleanup.md).
@@ -16,14 +16,19 @@ and the owner's independent pitch-inversion correction. Independent verifier,
 reviewer and scoped convergence all passed for driver manifest
 `3becafa68e0a7aecb3d62d2e839af6c092dfe2c2d576f4919c51f1d608f40acf`
 and release `e8679ac65dda8254839ef1eab620b8e69d1defb2ebef24ae40e5c984c6f84a41`.
-Git integration is still pending. Next: commit the saved changes, merge into
-local `main`, and verify clean-tree and branch containment.
+Local integration is complete: research commit `b0ae40a`, runtime cleanup commit
+`4145716`, and merge commit `eb5f0fe`. The merge tree exactly matched the reviewed
+feature tree; both feature tip `4145716` and previous main `d45e356` are ancestors
+of `main`. The working tree was clean after merging. Nothing was pushed, and the
+feature branch was retained. No cleanup/integration work remains.
 
-The Legion Go continues running the unchanged v4 test daemon. Steam's physical
+The Legion Go's last hardware-tested installation was v4; this cleanup did not
+replace or restart it. Steam's physical
 `04b4/2412` ignore entry was owner-confirmed to leave only the emulated DualSense
 Edge visible. Two Bluetooth motion values work; no verified third value exists.
 Historical checkpoints below must not be read as the current implementation or
-as acceptance evidence for the forthcoming cleaned build.
+as acceptance evidence for the new cleaned build. Deployment and remaining
+hardware acceptance were outside this task.
 
 ## UHID work stopped at repeated-blocker limit
 

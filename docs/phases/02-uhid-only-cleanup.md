@@ -94,7 +94,7 @@ Latest implementation and independent checks: 88 Rust tests, 35 Python tests,
 strict Clippy, formatting, release build and diff hygiene passed. Latest release
 SHA-256: `e8679ac65dda8254839ef1eab620b8e69d1defb2ebef24ae40e5c984c6f84a41`.
 
-## Final pre-merge acceptance evidence
+## Final acceptance evidence
 
 Independent verification, follow-up security review and scoped convergence all
 passed for the same saved version. The driver manifest SHA-256 is
@@ -117,8 +117,20 @@ Python caches and deleted paths. It hashes sorted lines of
 | Retained Python tooling and documentation guards | Pass | `python3 -m unittest discover -s tests -v`: 35 passed | None |
 | Diff hygiene | Pass | `git diff --check`: exit 0 | None |
 | Independent review and convergence | Pass, scoped | Verifier PASS, reviewer PASS with B1 resolved, scoped convergence PASS for matching source and release identities | Does not certify full PRD acceptance |
-| Git integration | Pending | Branch remains `feat/uhid-emulation` until packaging; local main starts at `d45e356` | Commit, merge locally, verify containment and clean tree |
+| Git integration | Pass | Merge `eb5f0fe`; feature tip `4145716` and previous main `d45e356` are ancestors of main; merge tree equals feature tree; working tree clean after merge | None for local cleanup scope |
 
-Next: package coherent commits and merge into local `main`, then record the
-actual integration commits and clean-tree/containment checks. Do not push or
-delete the feature branch as part of this task.
+## Completed local integration
+
+- Research and Steam visibility documentation: `b0ae40a`.
+- Verified UHID-only runtime, tests and active documentation: `4145716`.
+- Local merge: `eb5f0fe2a68831e7e2d43ec025e5b835598095ce`.
+- Feature tip: `414571605d3239ae8b5a029f16b69ece26ae14a0`.
+- `git diff --exit-code feat/uhid-emulation main` returned exit 0 at the merge.
+- `git merge-base --is-ancestor feat/uhid-emulation main` and
+  `git merge-base --is-ancestor d45e356 main` both returned exit 0.
+- `git status --porcelain` was empty after merging. The reviewed driver files
+  and release identity were unchanged.
+
+The authorized cleanup and local merge are complete. Nothing was pushed or
+deployed, and the feature branch was retained. Current-build hardware acceptance
+and full PRD acceptance remain open, not waived.
