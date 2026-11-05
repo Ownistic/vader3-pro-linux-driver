@@ -57,7 +57,7 @@ The controller must already be connected. Bluetooth DInput is the supported
 transport; rumble needs `bluetooth_address` in the configuration because it is
 delivered over the Nordic UART characteristic rather than HID output reports.
 
-Requires access to the controller's hidraw node and /dev/uinput (default), or
-/dev/uhid for the experimental UHID backend. See the README for permissions."
+Requires access to the controller's hidraw and evdev nodes and /dev/uhid.
+See the README for permissions."
     );
 }

@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use vader3p_steam::encode;
+use vader3p_steam::edge_report;
 use vader3p_steam::input::{self, button, extra, REPORT_LEN};
 
 /// Extract every `hex` value from the fixture's `reports` array.
@@ -131,9 +131,17 @@ fn fixture_c_and_z_use_byte_11_not_byte_9() {
 fn every_fixture_report_encodes_to_a_full_report() {
     for raw in load_fixture() {
         let state = input::parse(&raw).unwrap();
-        let out = encode::encode(&state);
-        assert_eq!(out.len(), vader3p_steam::descriptor::INPUT_REPORT_LEN);
-        assert_eq!(out[0], vader3p_steam::descriptor::INPUT_REPORT_ID);
+        let out = edge_report::input_report(
+            &state,
+            None,
+            [1, -1],
+            true,
+            std::time::Duration::from_millis(100),
+            std::time::Duration::ZERO,
+            0,
+        );
+        assert_eq!(out.len(), 64);
+        assert_eq!(out[0], 1);
     }
 }
 

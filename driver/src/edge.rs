@@ -173,7 +173,8 @@ impl EdgePad {
         &mut self,
         state: &State,
         sample: Option<MotionSample>,
-        scale: i16,
+        scale: [i32; 2],
+        swap_xy: bool,
         stale_after: Duration,
     ) -> Result<()> {
         if !self.created || !self.started {
@@ -183,6 +184,7 @@ impl EdgePad {
             state,
             sample,
             scale,
+            swap_xy,
             stale_after,
             self.origin.elapsed(),
             self.sequence,
@@ -458,10 +460,10 @@ mod tests {
             output_count: 0,
         };
         assert!(pad
-            .send(&State::default(), None, 1, Duration::ZERO)
+            .send(&State::default(), None, [1, 1], true, Duration::ZERO)
             .is_err());
         pad.handle(&event(2, 4)).unwrap();
-        pad.send(&State::default(), None, 1, Duration::ZERO)
+        pad.send(&State::default(), None, [1, 1], true, Duration::ZERO)
             .unwrap();
         let mut b = event(6, EVENT_SIZE);
         put16(&mut b, 4100, 48);

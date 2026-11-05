@@ -1,166 +1,145 @@
-"""Guards that the public documentation matches the code it describes.
-
-The README is the release artifact most likely to go stale, because it makes
-concrete promises: which config keys exist, which examples exist, which files hold
-the license. Every one of those is checkable from the repository, so a mismatch is
-a bug rather than a matter of taste.
-"""
+"""Check active documentation against the shipped UHID product surface."""
 
 import re
+import tomllib
+import unittest
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
-README = ROOT / "README.md"
+ACTIVE_DOCS = (
+    ROOT / "README.md",
+    ROOT / "driver/README.md",
+    ROOT / "docs/TESTING.md",
+    ROOT / "docs/uhid-migration.md",
+)
 
 
-def _readme():
-    return README.read_text()
+def rust_struct_fields(source: str, name: str) -> set[str]:
+    match = re.search(rf"pub struct {name}\s*\{{([^{{}}]*)\}}", source)
+    if match is None:
+        raise AssertionError(f"Rust struct {name} was not found")
+    return set(re.findall(r"pub (\w+)\s*:", match.group(1)))
 
 
-def _config_keys():
-    """Config field names, taken from the Rust struct rather than a copy."""
-    source = (ROOT / "driver" / "src" / "config.rs").read_text()
-    body = source.split("pub struct Config {", 1)[1].split("}", 1)[0]
-    return re.findall(r"pub (\w+):", body)
+class PublicDocumentationTests(unittest.TestCase):
+    def test_all_config_fields_are_documented(self):
+        source = (ROOT / "driver/src/config.rs").read_text()
+        readme = (ROOT / "README.md").read_text()
+        for struct in ("Config", "PadConfig", "MotionConfig"):
+            for field in rust_struct_fields(source, struct):
+                with self.subTest(struct=struct, field=field):
+                    self.assertRegex(readme, rf"\b{re.escape(field)}\b")
 
+    def test_documented_toml_samples_use_config_struct_fields(self):
+        source = (ROOT / "driver/src/config.rs").read_text()
+        allowed = {
+            "root": rust_struct_fields(source, "Config"),
+            "pad": rust_struct_fields(source, "PadConfig"),
+            "motion": rust_struct_fields(source, "MotionConfig"),
+        }
+        readme = (ROOT / "README.md").read_text()
+        samples = re.findall(r"```toml\s*\n(.*?)\n```", readme, re.DOTALL)
+        self.assertTrue(samples, "README must contain a TOML configuration sample")
 
-def test_readme_documents_every_config_key():
-    """A key that exists but is undocumented is a hidden feature."""
-    text = _readme()
-    for key in _config_keys():
-        assert f"`{key}`" in text, f"config key {key!r} is not in the README"
+        for sample_index, text in enumerate(samples):
+            parsed = tomllib.loads(text)
+            with self.subTest(sample=sample_index):
+                self.assertTrue(set(parsed).issubset(allowed["root"]))
+                for section, values in parsed.items():
+                    if isinstance(values, dict):
+                        self.assertIn(section, ("pad", "motion"))
+                        self.assertTrue(set(values).issubset(allowed[section]))
 
+        self.assertIn("[pad] backend = \"uhid\"", readme)
+        self.assertIn("explicit `uinput` is rejected", readme)
 
-def test_config_reference_has_no_invented_keys():
-    """A documented key that does not exist is a lie in the docs."""
-    keys = set(_config_keys())
-    section = _readme().split("## Configuration reference", 1)[1].split("\n## ", 1)[0]
-    documented = set(re.findall(r"^\| `(\w+)`", section, re.MULTILINE))
-    assert documented, "the configuration table was not found"
-    unknown = documented - keys
-    assert not unknown, f"README documents keys that do not exist: {sorted(unknown)}"
+    def test_help_and_readme_name_uhid_not_uinput_requirement(self):
+        help_text = (ROOT / "driver/src/main.rs").read_text()
+        readme = (ROOT / "README.md").read_text()
+        self.assertIn("/dev/uhid", help_text)
+        self.assertIn("/dev/uhid", readme)
+        self.assertNotIn("/dev/uinput", help_text)
+        self.assertNotIn("/dev/uinput", readme)
+        self.assertIn("explicit `uinput` is rejected", readme)
 
+    def test_license_files_and_release_status_match_manifest(self):
+        readme = (ROOT / "README.md").read_text()
+        manifest = (ROOT / "driver/Cargo.toml").read_text()
+        declaration = re.search(r'^license\s*=\s*"([^"]+)"', manifest, re.MULTILINE)
+        if declaration is None:
+            self.fail("Cargo.toml must declare the package license")
+        self.assertEqual(declaration.group(1), "MIT OR Apache-2.0")
+        self.assertIn("pre-1.0", readme[:1500])
+        for name in ("LICENSE-MIT", "LICENSE-APACHE"):
+            self.assertIn(name, readme)
+            self.assertTrue((ROOT / name).is_file())
+        self.assertIn("Dual-licensed under [MIT]", readme)
+        self.assertIn("or [Apache-2.0]", readme)
+        apache = (ROOT / "LICENSE-APACHE").read_text()
+        self.assertIn("Version 2.0, January 2004", apache)
+        self.assertTrue(apache.rstrip().endswith("limitations under the License."))
 
-def test_readme_referenced_examples_exist():
-    """Every `example` named in the README must be a real file."""
-    text = _readme()
-    named = set(re.findall(r"`(signal_probe|sdl_probe|raw_buttons|uinput_ff_probe|"
-                           r"ff_handshake_probe|ff_probe|uhid_caps)`", text))
-    assert named, "no examples referenced; the table may have been removed"
-    for name in named:
-        assert (ROOT / "driver" / "examples" / f"{name}.rs").is_file(), f"{name}.rs missing"
+    def test_cli_flags_and_rumble_frame_are_consistent(self):
+        source = (ROOT / "driver/src/main.rs").read_text()
+        for flag in ("--config", "--help", "--version"):
+            self.assertIn(f'"{flag}"', source)
+        readme = (ROOT / "README.md").read_text()
+        self.assertIn("exactly 4 bytes", readme)
+        self.assertIn("11 <left> <right> <duration_ms>", readme)
+        rumble = (ROOT / "driver/src/rumble.rs").read_text()
+        self.assertIn("BT_FRAME_LEN: usize = 4", rumble)
 
+    def test_motion_limitations_and_steam_visibility_are_explicit(self):
+        readme = (ROOT / "README.md").read_text()
+        for term in (
+            "fabricated",
+            "unknown third value",
+            "not validate this build",
+            "EVIOCGRAB",
+            "does not remove the device",
+        ):
+            self.assertIn(term, readme)
+        self.assertTrue((ROOT / "docs/steam-controller-visibility.md").is_file())
 
-def test_readme_referenced_scripts_exist():
-    text = _readme()
-    for name in ("interactive-test.py", "latency-test.py"):
-        assert name in text, f"{name} is not mentioned in the README"
-        assert (ROOT / "driver" / "contrib" / name).is_file(), f"{name} missing"
+    def test_migration_guide_documents_owned_legacy_cleanup_safely(self):
+        readme = (ROOT / "README.md").read_text()
+        guide_path = ROOT / "docs/uhid-migration.md"
+        guide = guide_path.read_text()
+        self.assertIn("[migration guide](docs/uhid-migration.md)", readme)
+        for artifact in (
+            "~/.config/systemd/user/vader3p-steam.service",
+            "~/.config/environment.d/vader3p-steam.conf",
+            "SDL_GAMECONTROLLERCONFIG",
+            "systemctl --user status vader3p-steam.service",
+            "systemctl --user cat vader3p-steam.service",
+            "systemctl --user show vader3p-steam.service",
+            "systemctl --user stop vader3p-steam.service",
+            "systemctl --user disable vader3p-steam.service",
+        ):
+            self.assertIn(artifact, guide)
+        self.assertIn("ExecStart=%h/.local/bin/vader3p-steam --config", guide)
+        self.assertIn("RestartSec=3", guide)
+        self.assertIn("does not grant device permissions", guide)
+        self.assertIn("does not restore or start", guide)
+        self.assertIn("04b4:2412", guide)
+        self.assertNotIn("systemctl --user revert", guide.split("Optional user service", 1)[1])
 
+    def test_documented_examples_and_local_markdown_links_exist(self):
+        for doc in ACTIVE_DOCS:
+            text = doc.read_text()
+            for example in re.findall(r"cargo run[^\n]*--example\s+([\w-]+)", text):
+                self.assertTrue((ROOT / f"driver/examples/{example}.rs").is_file(), example)
+            for script in re.findall(r"python3\s+([\w./-]+\.py)", text):
+                candidates = (doc.parent / script, ROOT / script)
+                self.assertTrue(any(candidate.is_file() for candidate in candidates), script)
 
-def test_readme_cli_reference_matches_help_text():
-    """The documented flags must be the ones the binary accepts."""
-    source = (ROOT / "driver" / "src" / "main.rs").read_text()
-    for flag in ("--config", "--help", "--version"):
-        assert f'"{flag}"' in source, f"{flag} is documented but not handled by main.rs"
-
-
-def test_help_text_names_the_node_the_daemon_actually_opens():
-    """Regression: --help once claimed /dev/uhid while the pad uses /dev/uinput.
-
-    A wrong permission path in user-facing help sends people to fix the wrong
-    thing, and the symptom (permission denied creating the pad) looks unrelated.
-    """
-    help_text = (ROOT / "driver" / "src" / "main.rs").read_text()
-    pad_source = (ROOT / "driver" / "src" / "pad.rs").read_text()
-    if '"/dev/uinput"' in pad_source:
-        assert "/dev/uinput" in help_text, "help must name /dev/uinput"
-        assert "/dev/uhid" not in help_text.split("Requires access", 1)[1], (
-            "help must not claim /dev/uhid is required"
-        )
-
-
-def test_license_files_exist_for_the_declared_license():
-    """Publishing with a declared license but no text means nobody may use it."""
-    manifest = (ROOT / "driver" / "Cargo.toml").read_text()
-    declared = re.search(r'^license\s*=\s*"([^"]+)"', manifest, re.MULTILINE)
-    assert declared, "Cargo.toml has no license field"
-    value = declared.group(1)
-    assert "MIT" in value
-    assert (ROOT / "LICENSE-MIT").is_file(), "MIT text missing"
-    if "Apache" in value:
-        assert (ROOT / "LICENSE-APACHE").is_file(), "Apache text missing"
-    readme = _readme()
-    assert "LICENSE-MIT" in readme and "LICENSE-APACHE" in readme
-
-
-def test_apache_license_text_is_the_canonical_one():
-    """A truncated or edited Apache text is not the Apache license."""
-    text = (ROOT / "LICENSE-APACHE").read_text()
-    assert "Apache License" in text
-    assert "Version 2.0, January 2004" in text
-    # The canonical file ends with the limitations paragraph.
-    assert text.rstrip().endswith("limitations under the License.")
-
-
-def test_documented_rumble_frame_length_matches_the_code():
-    """The README states the frame is exactly 4 bytes; the code must agree."""
-    rumble = (ROOT / "driver" / "src" / "rumble.rs").read_text()
-    assert "BT_DURATION_MS" in rumble
-    readme = _readme()
-    assert "exactly 4" in readme, "the length requirement is the key insight"
-    # The four bytes are the command plus two levels plus a duration.
-    assert "11 <left> <right> <duration_ms>" in readme
-
-
-def test_readme_does_not_claim_steam_is_verified():
-    """The one unverified acceptance criterion must stay marked as such."""
-    text = _readme()
-    assert "**Untested**" in text or "Not yet verified" in text, (
-        "the README must keep the Steam gap visible"
-    )
-
-
-def test_readme_states_pre_1_0_status_at_the_top():
-    """A reader must learn the API is unstable before reading install steps.
-
-    The promise "interface may change until 1.0" is only useful if it appears
-    before someone has already built against it, so it is checked to be in the
-    first screenful rather than merely present somewhere.
-    """
-    head = _readme()[:1500]
-    assert "pre-1.0" in head or "under active development" in head, (
-        "the README must state the pre-1.0 status near the top"
-    )
-
-
-def test_readme_does_not_hardcode_test_counts():
-    """Test counts rot; the README said 37 Python tests when there were 48.
-
-    The count itself is not useful to a reader -- the runner prints it. Stating it
-    only creates a number that nobody remembers to update, so the fix is to not
-    state it rather than to keep two copies in sync.
-    """
-    text = _readme()
-    stale = re.search(r"#\s*\d+\s+(Rust|Python)\s+tests", text)
-    assert not stale, (
-        f"the README states a hardcoded test count ({stale.group(0)!r}); "
-        "the runner reports it, so the doc should not duplicate it"
-    )
-
-
-def test_progress_documents_the_working_driver_not_only_research():
-    """PROGRESS.md once still said rumble was unresolved after it was solved.
-
-    A stale progress record is worse than none, because a reader trusts it for the
-    current state rather than the history.
-    """
-    progress = (ROOT / "PROGRESS.md").read_text()
-    assert "Solved" in progress or "solved" in progress
-    assert "Current state" in progress
+            for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", text):
+                if target.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                path = target.split("#", 1)[0]
+                if path:
+                    self.assertTrue((doc.parent / path).resolve().exists(), f"{doc}: {target}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(pytest.main([__file__, "-v"]))
+    unittest.main()

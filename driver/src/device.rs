@@ -1,18 +1,7 @@
 //! Physical device discovery and report reading.
 //!
-//! Two transports are relevant and they are genuinely different:
-//!
-//! - **USB DInput** exposes a hidraw node with real output reports on the
-//!   `0xFFA0` vendor interface (`mi_02`). Rumble works there with a plain
-//!   `05 0F <L> <R>` hidraw write.
-//! - **Bluetooth DInput** exposes a hidraw node for *input only*. Its
-//!   descriptor declares zero output reports, so hidraw writes are accepted
-//!   unconditionally and do nothing. Rumble over Bluetooth must go through the
-//!   Nordic UART GATT characteristic instead.
-//!
-//! This module only locates and reads the physical device. It deliberately does
-//! not write to hidraw, because on Bluetooth that would silently succeed while
-//! having no effect.
+//! The product path reads Bluetooth DInput; rumble is delivered separately over
+//! Nordic UART, never by a hidraw write.
 
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read};
@@ -77,9 +66,7 @@ impl PhysicalDevice {
     /// This is **not** sufficient to choose a rumble mechanism on its own. A
     /// 2.4 GHz dongle was observed presenting itself as `HID_ID=0005:04B4:2412`
     /// — Bluetooth bus, Cypress vendor id — because a userspace daemon forwards
-    /// it through uhid. Delivery is therefore decided by attempting the GATT
-    /// characteristic for the configured address and falling back to a hidraw
-    /// write, rather than trusting the bus field alone.
+    /// it through uhid. The bus field alone does not establish the transport.
     #[must_use]
     pub fn is_bluetooth(&self) -> bool {
         self.bus == 0x05
@@ -288,7 +275,7 @@ pub fn discover_detailed(vendor: u16, product: u16) -> Vec<HidrawNode> {
 /// Discover every hidraw node that looks like a Vader 3 Pro.
 ///
 /// A node is a candidate when **either** its vendor/product pair matches a
-/// known Flydigi or alternate ID, **or** its report descriptor digest matches the
+/// known Flydigi ID, **or** its report descriptor digest matches the
 /// recorded DInput descriptor. The second condition is what actually matters:
 /// a real connection was observed advertising Cypress IDs (`04b4:2412`) while
 /// serving the genuine DInput descriptor, which a VID/PID match alone would
@@ -308,12 +295,9 @@ pub fn discover_candidates() -> Vec<HidrawNode> {
         };
 
         let mut hid_id = None;
-        let mut name = None;
         for line in text.lines() {
             if let Some(rest) = line.strip_prefix("HID_ID=") {
                 hid_id = Some(rest.to_string());
-            } else if let Some(rest) = line.strip_prefix("HID_NAME=") {
-                name = Some(rest.to_string());
             }
         }
         let Some(hid_id) = hid_id else { continue };
@@ -332,20 +316,14 @@ pub fn discover_candidates() -> Vec<HidrawNode> {
             .and_then(|s| u32::from_str_radix(s, 16).ok())
             .unwrap_or(0) as u16;
 
-        let id_match = (vid == VENDOR_ID && pid == PRODUCT_ID) || ALT_VENDOR_IDS.contains(&vid);
-        let name_match = name
-            .as_deref()
-            .is_some_and(|n| n.to_ascii_lowercase().contains("vader3"));
-
-        // Read the descriptor only when the cheap checks did not already match,
-        // to avoid opening descriptors for every mouse on the system.
-        let descriptor_match = if id_match || name_match {
+        let id_match = vid == VENDOR_ID && pid == PRODUCT_ID;
+        let descriptor_match = if id_match || bus != 0x05 {
             false
         } else {
             descriptor_digest_matches(&entry.path())
         };
 
-        if !(id_match || name_match || descriptor_match) {
+        if !candidate_matches(bus, id_match, descriptor_match) {
             continue;
         }
 
@@ -377,6 +355,12 @@ pub fn discover_candidates() -> Vec<HidrawNode> {
             .then_with(|| a.path.cmp(&b.path))
     });
     found
+}
+
+// Bus 5 is necessary but not proof of a physical Bluetooth link: some dongles
+// are forwarded through UHID. Match a target identity or recorded descriptor too.
+fn candidate_matches(bus: u32, id_match: bool, descriptor_match: bool) -> bool {
+    bus == 0x05 && (id_match || descriptor_match)
 }
 
 /// True when the node's report descriptor is byte-identical to the recorded
@@ -588,6 +572,15 @@ pub fn newest_state(reports: &[Vec<u8>]) -> Option<crate::input::State> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn discovery_requires_target_identity_and_bluetooth_bus() {
+        assert!(candidate_matches(5, true, false));
+        // The recorded 04b4:2412 device is accepted by its descriptor.
+        assert!(candidate_matches(5, false, true));
+        assert!(!candidate_matches(5, false, false));
+        assert!(!candidate_matches(3, true, true));
+    }
 
     fn report_with_left_x(value: u8) -> Vec<u8> {
         let mut r = vec![0u8; crate::input::REPORT_LEN];

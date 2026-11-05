@@ -1,5 +1,99 @@
 # Handoff — 2026-11-03
 
+## Latest: UHID-only cleanup verified; local merge pending
+
+The owner authorized removing the legacy backend and merging into local `main`.
+The sole runtime now creates a DualSense Edge through `/dev/uhid`. Legacy uinput
+implementation, generic force-feedback probes, SDL mapping and old contrib
+scripts were removed. Existing `backend = "uhid"` configs remain readable;
+explicit uinput selection is rejected. Current install and migration guidance is
+in the [README](../README.md) and [migration guide](uhid-migration.md).
+
+Independent verification, review and scoped convergence passed for driver
+manifest `3becafa68e0a7aecb3d62d2e839af6c092dfe2c2d576f4919c51f1d608f40acf`
+and release SHA-256
+`e8679ac65dda8254839ef1eab620b8e69d1defb2ebef24ae40e5c984c6f84a41`:
+88 Rust tests, 35 Python tests, strict all-target Clippy, formatting and release
+build pass. Review's BlueZ sender-authentication blocker was corrected and
+re-reviewed. Notifications now require the resolved unique owner and authenticated
+ownership changes invalidate samples.
+
+The owner's latest hardware feedback was inverted pitch with correct yaw on
+the running v4 daemon. Independent `motion.invert_x = true` now corrects pitch
+in code; existing yaw inversion is unchanged. This new executable has **not**
+been deployed or hardware-verified. The Legion Go's earlier v4 artifact and
+Steam ignore setting were not changed by this cleanup. Third gyro component,
+measured acceleration/calibration and other live acceptance gaps remain open.
+
+Next: commit the saved feature-branch changes, merge into local `main`, record
+actual integration commits and check the clean tree. No push or branch deletion.
+Full criteria and gate history: [cleanup record](phases/02-uhid-only-cleanup.md).
+
+## Latest: Steam shows only the emulated controller
+
+On 2026-11-05 UTC, the owner confirmed that only **DualSense Edge Wireless
+Controller** remained in Steam after adding `04b4/2412` to the root
+`InstallConfigStore.controller_blacklist` in Steam's `config.vdf` and restarting
+Steam. The physical evdev grab was already active; it did not hide enumeration.
+No driver change or kernel unbind was needed. The same v4 daemon/PID and binary
+hash remained active. This persistent Steam-only setting must be undone for
+native use in Steam after stopping the driver. Post-change input behavior was
+not separately retested.
+
+- Reusable setup/undo: [Steam controller visibility](steam-controller-visibility.md).
+- Exact backup, hashes and verification: [visibility evidence](evidence/steam-physical-device-hiding-2026-11-05.md).
+
+The background Android BLE investigation finished and saved
+[its report](evidence/bluetooth-third-motion-app-static.md). It identifies the
+NUS tail as cursor coordinates and finds only two motion values in the inspected
+SDK path. It does not establish a third-axis Bluetooth contract or prove global
+absence. No new controller commands were authorized from the report. Further
+third-axis work is deferred while the owner focuses on documenting visibility.
+
+## Latest: owner reports working controls; third motion component unresolved
+
+The resumed hardware checks proved that `AC 01` can return a D-Bus `NoReply`
+while the controller actually answers selector 1 and streams data. The worker
+now verifies observations instead of aborting on that ambiguous method result.
+Rust passive and power-cycled movement probes passed. The integrated daemon
+exposed gyro in Steam but no ordinary controls: zero HID reports with NUS active.
+A focused firmware trace found that AC mode replaces the HID builder and includes
+ordinary inputs in NUS bytes 0–10. A new parser/runtime integration and X/Y swap
+correction are saved. Owner confirmed A, sticks, triggers, M1–M3 and corrected
+axis selection. Physical X/Y labels and yaw sign then needed correction;
+the updated candidate passes 142 tests. After free testing, the owner reported
+everything working correctly except the missing third gyro axis. This confirms
+the current mappings in that test, not independent latency/reconnect evidence.
+The third emulated component remains deliberately zero: no verified third-value
+Bluetooth packet contract has been found. The standard live firmware-version
+characteristic reports `6.7.5.1`, matching the analyzed version string but not
+proving image identity. Further findings and bounds:
+[third-component investigation](evidence/third-motion-component-static.md).
+Remaining hardware checks and independent gates are still open.
+**Not fully accepted.**
+
+USB investigation then found a real third-component candidate: after a data
+cable retry, the owner-confirmed roll capture received 3,943 `04 FE 66` reports
+in eight seconds; word `+b2` ranged -8,322..8,501 while the other two known
+components remained small. No enable command was sent. USB full-motion support
+is **not implemented** and this does not add a third Bluetooth value. The owner
+explicitly chose **Bluetooth-only scope**: do not add a USB backend. USB was
+unplugged and Bluetooth reconnected; the unchanged v4 daemon logged physical
+reattach and resumed NUS input. The focused official Android BLE SDK investigation
+completed without live writes; see the latest report link above. Exact USB
+descriptors, field positions and limits:
+[USB third-component observation](evidence/usb-third-motion-observation-2026-11-04.md).
+
+At the owner's explicit request the old installed uinput service/binary were
+disabled and archived on the Legion Go. Do not restore them automatically.
+Only transient `vader3p-uhid-test-v4.service` is running, with no time cutoff or
+fallback hook; it is not boot-enabled. Current binary SHA-256:
+`616d9e1b5f2e808561ea2213271e0c5db6136525cbce031caffd6a501da4c715`.
+
+Exact artifacts, observations, service caveats and next action:
+[runtime retest evidence](evidence/uhid-runtime-retest-2026-11-04.md).
+Static protocol contract: [NUS input prefix](evidence/nus-input-prefix-static.md).
+
 ## Latest: integrated UHID run stopped at retry limit
 
 The optional backend is saved but **not a validated working motion feature**.

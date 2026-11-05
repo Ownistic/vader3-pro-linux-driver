@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 
 use crate::ble_worker::BleWorker;
-use crate::config::{Backend, Config};
+use crate::config::Config;
 use crate::device::{self, PhysicalDevice};
 use crate::edge::EdgePad;
 use crate::input::{self, State};
@@ -17,7 +17,7 @@ const REATTACH_INTERVAL: Duration = Duration::from_secs(1);
 const METRICS_INTERVAL: Duration = Duration::from_secs(5);
 
 fn worker_needed(cfg: &Config) -> bool {
-    cfg.pad.backend == Backend::Uhid && (cfg.motion.enabled || cfg.rumble)
+    cfg.motion.enabled || cfg.rumble
 }
 
 fn feedback_allowed(connected: bool, rumble: bool) -> bool {
@@ -26,6 +26,33 @@ fn feedback_allowed(connected: bool, rumble: bool) -> bool {
 
 fn report_due(now: Instant, deadline: Instant, changed: bool) -> bool {
     changed || now >= deadline
+}
+
+// Once NUS has supplied input on this physical connection, never fall back to
+// queued HID reports: session loss or stale data must neutralize controls.
+fn choose_input(
+    active: &mut bool,
+    sample: Option<(State, Duration)>,
+    stale: Duration,
+    hid: Option<State>,
+    previous: State,
+) -> (State, bool) {
+    if let Some((state, age)) = sample {
+        *active = true;
+        return (
+            if age <= stale {
+                state
+            } else {
+                State::default()
+            },
+            true,
+        );
+    }
+    if *active {
+        (State::default(), true)
+    } else {
+        (hid.unwrap_or(previous), false)
+    }
 }
 
 fn attach(cfg: &Config, log: &Logger) -> Result<(PhysicalDevice, Vec<ExclusiveGrab>)> {
@@ -80,6 +107,7 @@ fn attach(cfg: &Config, log: &Logger) -> Result<(PhysicalDevice, Vec<ExclusiveGr
 struct Counters {
     physical: u64,
     changes: u64,
+    nus_changes: u64,
     virtual_reports: u64,
     max_generation_us: u128,
     debug_changes: u64,
@@ -94,6 +122,7 @@ pub struct EdgeRuntime {
     physical: Option<PhysicalDevice>,
     grabs: Vec<ExclusiveGrab>,
     state: State,
+    nus_active: bool,
     next_report: Instant,
     next_attach: Instant,
     next_metrics: Instant,
@@ -103,10 +132,6 @@ pub struct EdgeRuntime {
 impl EdgeRuntime {
     pub fn start(cfg: Config) -> Result<Self> {
         cfg.validate()?;
-        anyhow::ensure!(
-            cfg.pad.backend == Backend::Uhid,
-            "Edge runtime requires uhid backend"
-        );
         let log = Logger::new(&cfg.log_level);
         let (physical, grabs) = attach(&cfg, &log)?;
         let pad = EdgePad::create(&cfg.virtual_name)?;
@@ -127,6 +152,7 @@ impl EdgeRuntime {
             physical: Some(physical),
             grabs,
             state: State::default(),
+            nus_active: false,
             next_report: now,
             next_attach: now + REATTACH_INTERVAL,
             next_metrics: now + METRICS_INTERVAL,
@@ -167,10 +193,11 @@ impl EdgeRuntime {
                     .as_ref()
                     .map(BleWorker::diagnostics)
                     .unwrap_or_default();
-                log_info!(self.log, "UHID counters (5s): physical_reports={} state_updates={} virtual_reports={} motion_notifications_total={} selector_status={:?} subscribed={} max_report_generation_us={}", self.counters.physical, self.counters.changes, self.counters.virtual_reports, diag.motion_notifications, diag.selector_status, diag.subscribed, self.counters.max_generation_us);
+                log_info!(self.log, "UHID counters (5s): physical_reports={} state_updates={} nus_state_updates={} virtual_reports={} motion_notifications_total={} selector_status={:?} subscribed={} max_report_generation_us={}", self.counters.physical, self.counters.changes, self.counters.nus_changes, self.counters.virtual_reports, diag.motion_notifications, diag.selector_status, diag.subscribed, self.counters.max_generation_us);
                 self.counters = Counters::default();
                 self.next_metrics = now + METRICS_INTERVAL;
             }
+            self.update_input(None);
             if self.pad.started() && report_due(now, self.next_report, false) {
                 self.send()?;
             } else if !self.pad.started() && now >= self.next_report {
@@ -196,14 +223,8 @@ impl EdgeRuntime {
                 Ok(latest)
             })();
             match outcome {
-                Ok(Some(state)) if state != self.state => {
-                    self.state = state;
-                    self.counters.changes += 1;
-                    if self.counters.debug_changes < 20 {
-                        log_debug!(self.log, "state: {}", describe(&state));
-                        self.counters.debug_changes += 1;
-                    }
-                    if self.pad.started() && report_due(Instant::now(), self.next_report, true) {
+                Ok(Some(state)) => {
+                    if self.update_input(Some(state)) && self.pad.started() {
                         self.send()?;
                     }
                 }
@@ -220,6 +241,39 @@ impl EdgeRuntime {
         Ok(())
     }
 
+    fn update_input(&mut self, hid: Option<State>) -> bool {
+        let sample = if self.cfg.motion.enabled && self.physical.is_some() {
+            self.worker.as_ref().and_then(BleWorker::input_sample)
+        } else {
+            None
+        };
+        let (state, nus) = choose_input(
+            &mut self.nus_active,
+            sample,
+            Duration::from_millis(self.cfg.motion.stale_ms),
+            hid,
+            self.state,
+        );
+        if state == self.state {
+            return false;
+        }
+        self.state = state;
+        self.counters.changes += 1;
+        if nus {
+            self.counters.nus_changes += 1;
+        }
+        if self.counters.debug_changes < 20 {
+            log_debug!(
+                self.log,
+                "{} state: {}",
+                if nus { "NUS" } else { "HID" },
+                describe(&state)
+            );
+            self.counters.debug_changes += 1;
+        }
+        true
+    }
+
     fn send(&mut self) -> Result<()> {
         let start = Instant::now();
         let sample = if self.cfg.motion.enabled && self.physical.is_some() {
@@ -230,7 +284,8 @@ impl EdgeRuntime {
         self.pad.send(
             &self.state,
             sample,
-            self.cfg.motion.scale,
+            self.cfg.motion.axis_scales(),
+            self.cfg.motion.swap_xy,
             Duration::from_millis(self.cfg.motion.stale_ms),
         )?;
         self.counters.virtual_reports += 1;
@@ -248,6 +303,7 @@ impl EdgeRuntime {
         }
         self.pad.stop_feedback();
         self.state = State::default();
+        self.nus_active = false;
         self.physical = None;
         self.grabs.clear();
         self.next_attach = Instant::now() + REATTACH_INTERVAL;
@@ -265,7 +321,8 @@ impl Drop for EdgeRuntime {
             let _ = self.pad.send(
                 &self.state,
                 None,
-                self.cfg.motion.scale,
+                self.cfg.motion.axis_scales(),
+                self.cfg.motion.swap_xy,
                 Duration::from_millis(self.cfg.motion.stale_ms),
             );
         }
@@ -280,8 +337,7 @@ mod tests {
     #[test]
     fn worker_plan_is_disabled_without_features() {
         let mut cfg = Config::default();
-        assert!(!worker_needed(&cfg));
-        cfg.pad.backend = Backend::Uhid;
+        assert!(worker_needed(&cfg));
         cfg.rumble = false;
         assert!(!worker_needed(&cfg));
         cfg.motion.enabled = true;
@@ -302,12 +358,55 @@ mod tests {
 
     #[test]
     fn direct_constructor_rejects_invalid_configuration_before_device_access() {
-        let mut cfg = Config::default();
-        cfg.pad.backend = Backend::Uhid;
+        let cfg = Config::default();
         assert!(EdgeRuntime::start(cfg)
             .err()
             .unwrap()
             .to_string()
             .contains("bluetooth_address"));
+    }
+
+    #[test]
+    fn nus_priority_stale_and_disconnect_reset() {
+        let mut active = false;
+        let hid = State {
+            buttons: 1,
+            ..State::default()
+        };
+        let nus = State {
+            buttons: 2,
+            left_x: 42,
+            left_trigger: 5,
+            ..State::default()
+        };
+        let limit = Duration::from_millis(100);
+        assert_eq!(
+            choose_input(&mut active, None, limit, Some(hid), State::default()).0,
+            hid
+        );
+        assert_eq!(
+            choose_input(&mut active, Some((nus, limit)), limit, Some(hid), hid).0,
+            nus
+        );
+        assert_eq!(
+            choose_input(
+                &mut active,
+                Some((nus, limit + Duration::from_nanos(1))),
+                limit,
+                Some(hid),
+                nus
+            )
+            .0,
+            State::default()
+        );
+        assert_eq!(
+            choose_input(&mut active, None, limit, Some(hid), nus).0,
+            State::default()
+        );
+        active = false;
+        assert_eq!(
+            choose_input(&mut active, None, limit, Some(hid), State::default()).0,
+            hid
+        );
     }
 }

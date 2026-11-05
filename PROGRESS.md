@@ -1,5 +1,30 @@
 # Progress
 
+## Current: UHID-only cleanup and main integration
+
+The owner authorized removing the old backend and merging `feat/uhid-emulation`
+into local `main`. The existing uncommitted runtime fixes and research are
+preserved in checkpoint `before-uhid-only-cleanup`. Baseline at `cb7895a` plus
+those changes: `cargo test --all-targets` passed 145 tests. The saved scope and
+acceptance checks are in [the cleanup record](docs/phases/02-uhid-only-cleanup.md).
+Implementation now removes the old runtime, generic force-feedback backend,
+probes and mapping/scripts. The sole startup path is DualSense Edge UHID. Existing
+UHID configs remain readable; explicit uinput selection fails. Implementation
+checks now pass 88 Rust tests, 35 Python tests, strict Clippy, formatting and
+release build after migration-guide repairs, BlueZ unique-owner authentication
+and the owner's independent pitch-inversion correction. Independent verifier,
+reviewer and scoped convergence all passed for driver manifest
+`3becafa68e0a7aecb3d62d2e839af6c092dfe2c2d576f4919c51f1d608f40acf`
+and release `e8679ac65dda8254839ef1eab620b8e69d1defb2ebef24ae40e5c984c6f84a41`.
+Git integration is still pending. Next: commit the saved changes, merge into
+local `main`, and verify clean-tree and branch containment.
+
+The Legion Go continues running the unchanged v4 test daemon. Steam's physical
+`04b4/2412` ignore entry was owner-confirmed to leave only the emulated DualSense
+Edge visible. Two Bluetooth motion values work; no verified third value exists.
+Historical checkpoints below must not be read as the current implementation or
+as acceptance evidence for the forthcoming cleaned build.
+
 ## UHID work stopped at repeated-blocker limit
 
 The optional backend is saved but **not validated or ready for deployment**.

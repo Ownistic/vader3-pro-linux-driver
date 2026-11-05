@@ -6,7 +6,10 @@
 
 use std::time::Duration;
 
-use crate::encode::centre_axis;
+// Physical stick bytes are signed, while Edge stick bytes are unsigned.
+pub(crate) fn centre_axis(raw: u8) -> u8 {
+    (i16::from(raw as i8) + 128) as u8
+}
 use crate::input::{button, extra, State};
 use crate::motion::RawMotion;
 
@@ -20,14 +23,16 @@ pub struct MotionSample {
 /// Encode the 64-byte numbered USB input report.
 ///
 /// The first and second uncalibrated notification values are provisionally
-/// mapped to X and Y. The third component is zero. `scale` is an integer
-/// multiplier, with signed 16-bit saturation; a stale sample becomes zero.
+/// mapped to Y and X by default when `swap_xy` is true. The third component is zero.
+/// `scale` contains X and Y multipliers applied after selection, with signed
+/// 16-bit saturation; a stale sample becomes zero.
 /// None of these values is a calibrated physical gyro measurement.
 #[must_use]
 pub fn input_report(
     state: &State,
     sample: Option<MotionSample>,
-    scale: i16,
+    scale: [i32; 2],
+    swap_xy: bool,
     stale_after: Duration,
     elapsed: Duration,
     sequence: u8,
@@ -100,9 +105,14 @@ pub fn input_report(
     }
 
     if let Some(sample) = sample.filter(|sample| sample.age <= stale_after) {
-        for (offset, value) in [(16, sample.raw.first), (18, sample.raw.second)] {
-            let value = (i32::from(value) * i32::from(scale))
-                .clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+        let (x, y) = if swap_xy {
+            (sample.raw.second, sample.raw.first)
+        } else {
+            (sample.raw.first, sample.raw.second)
+        };
+        for (offset, value, multiplier) in [(16, x, scale[0]), (18, y, scale[1])] {
+            let value = (i64::from(value) * i64::from(multiplier))
+                .clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16;
             out[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
         }
     }
@@ -161,7 +171,8 @@ mod tests {
         let neutral = input_report(
             &State::default(),
             None,
-            1,
+            [1, 1],
+            false,
             Duration::ZERO,
             Duration::ZERO,
             0,
@@ -172,7 +183,15 @@ mod tests {
                 buttons: 1 << i,
                 ..State::default()
             };
-            let r = input_report(&state, None, 1, Duration::ZERO, Duration::ZERO, 0);
+            let r = input_report(
+                &state,
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::ZERO,
+                0,
+            );
             assert_ne!(&r[8..11], &neutral[8..11]);
             assert!(states.insert([r[8], r[9], r[10]]));
         }
@@ -181,7 +200,15 @@ mod tests {
                 extras: 1 << i,
                 ..State::default()
             };
-            let r = input_report(&state, None, 1, Duration::ZERO, Duration::ZERO, 0);
+            let r = input_report(
+                &state,
+                None,
+                [1, 1],
+                false,
+                Duration::ZERO,
+                Duration::ZERO,
+                0,
+            );
             assert!(states.insert([r[8], r[9], r[10]]));
         }
         let all = State {
@@ -189,7 +216,7 @@ mod tests {
             ..State::default()
         };
         assert_eq!(
-            input_report(&all, None, 1, Duration::ZERO, Duration::ZERO, 0)[10],
+            input_report(&all, None, [1, 1], false, Duration::ZERO, Duration::ZERO, 0)[10],
             0xf6
         );
         assert_eq!(neutral[10], 0);
@@ -208,7 +235,8 @@ mod tests {
         let r = input_report(
             &State::default(),
             Some(sample),
-            100,
+            [100, 100],
+            false,
             Duration::from_millis(10),
             Duration::from_micros(1_431_655_766),
             0,
@@ -220,12 +248,156 @@ mod tests {
         let stale = input_report(
             &State::default(),
             Some(sample),
-            1,
+            [1, 1],
+            false,
             Duration::from_millis(9),
             Duration::ZERO,
             0,
         );
         assert_eq!(&stale[16..22], &[0; 6]);
+    }
+
+    #[test]
+    fn motion_axis_swap_is_configurable() {
+        let sample = Some(MotionSample {
+            raw: RawMotion {
+                first: 123,
+                second: -456,
+            },
+            age: Duration::ZERO,
+        });
+        for (swap, x, y) in [(true, -456i16, 123i16), (false, 123, -456)] {
+            let r = input_report(
+                &State::default(),
+                sample,
+                [1, 1],
+                swap,
+                Duration::ZERO,
+                Duration::ZERO,
+                0,
+            );
+            assert_eq!(i16::from_le_bytes([r[16], r[17]]), x);
+            assert_eq!(i16::from_le_bytes([r[18], r[19]]), y);
+            assert_eq!(&r[20..22], &[0, 0]);
+        }
+        let extreme = Some(MotionSample {
+            raw: RawMotion {
+                first: 2047,
+                second: -2048,
+            },
+            age: Duration::from_millis(1),
+        });
+        let swapped = input_report(
+            &State::default(),
+            extreme,
+            [100, 100],
+            true,
+            Duration::from_millis(1),
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!(i16::from_le_bytes([swapped[16], swapped[17]]), i16::MIN);
+        assert_eq!(i16::from_le_bytes([swapped[18], swapped[19]]), i16::MAX);
+        let stale = input_report(
+            &State::default(),
+            extreme,
+            [100, 100],
+            true,
+            Duration::ZERO,
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!(&stale[16..22], &[0; 6]);
+    }
+
+    #[test]
+    fn configured_axis_inversions_apply_after_swap_and_before_saturation() {
+        use crate::config::MotionConfig;
+        let sample = Some(MotionSample {
+            raw: RawMotion {
+                first: 123,
+                second: -456,
+            },
+            age: Duration::ZERO,
+        });
+        let mut cfg = MotionConfig::default();
+        for (swap, invert_x, invert_y, x, y) in [
+            (true, true, true, 456i16, -123i16),
+            (true, false, true, -456, -123),
+            (true, true, false, 456, 123),
+            (false, true, true, -123, 456),
+        ] {
+            cfg.swap_xy = swap;
+            cfg.invert_x = invert_x;
+            cfg.invert_y = invert_y;
+            let r = input_report(
+                &State::default(),
+                sample,
+                cfg.axis_scales(),
+                cfg.swap_xy,
+                Duration::ZERO,
+                Duration::ZERO,
+                0,
+            );
+            assert_eq!(i16::from_le_bytes([r[16], r[17]]), x);
+            assert_eq!(i16::from_le_bytes([r[18], r[19]]), y);
+            assert_eq!(&r[20..22], &[0, 0]);
+        }
+        cfg.scale = i16::MIN;
+        cfg.invert_x = true;
+        cfg.invert_y = true;
+        cfg.swap_xy = true;
+        let r = input_report(
+            &State::default(),
+            sample,
+            cfg.axis_scales(),
+            true,
+            Duration::ZERO,
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!(i16::from_le_bytes([r[16], r[17]]), i16::MIN);
+        assert_eq!(i16::from_le_bytes([r[18], r[19]]), i16::MAX);
+        cfg.invert_x = false;
+        let r = input_report(
+            &State::default(),
+            sample,
+            cfg.axis_scales(),
+            true,
+            Duration::ZERO,
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!(i16::from_le_bytes([r[16], r[17]]), i16::MAX);
+        assert_eq!(i16::from_le_bytes([r[18], r[19]]), i16::MAX);
+        let r = input_report(
+            &State::default(),
+            sample,
+            [i32::MIN, i32::MAX],
+            true,
+            Duration::ZERO,
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!(i16::from_le_bytes([r[16], r[17]]), i16::MAX);
+        assert_eq!(i16::from_le_bytes([r[18], r[19]]), i16::MAX);
+        let stale = Some(MotionSample {
+            age: Duration::from_millis(1),
+            raw: RawMotion {
+                first: 123,
+                second: -456,
+            },
+        });
+        let r = input_report(
+            &State::default(),
+            stale,
+            cfg.axis_scales(),
+            true,
+            Duration::ZERO,
+            Duration::ZERO,
+            0,
+        );
+        assert_eq!(&r[16..22], &[0; 6]);
     }
 
     #[test]
@@ -247,7 +419,15 @@ mod tests {
                 ..State::default()
             };
             assert_eq!(
-                input_report(&state, None, 1, Duration::ZERO, Duration::ZERO, 0)[8],
+                input_report(
+                    &state,
+                    None,
+                    [1, 1],
+                    false,
+                    Duration::ZERO,
+                    Duration::ZERO,
+                    0
+                )[8],
                 hat
             );
         }
