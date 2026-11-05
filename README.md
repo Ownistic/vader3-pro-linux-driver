@@ -32,7 +32,44 @@ physical event grabs do not remove the controller from Steam.
 
 ## Install
 
-### Prerequisites
+### One-command installation
+
+On x86-64 Linux, including Bazzite, install the latest published release as your
+normal user:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ownistic/vader3-pro-linux-driver/main/install.sh | sh
+```
+
+The installer downloads the release binary and its SHA-256 checksum from GitHub,
+verifies the checksum, and installs `~/.local/bin/vader3p-steam`. The checksum
+detects download corruption; it is not an independent signature. Review a script
+before piping it to a shell. The command requires `curl`, GNU coreutils, a
+published release, glibc 2.35 or later, and the D-Bus runtime library. Before the
+first release is published, the download fails. It does not install packages, grant device access,
+pair controllers, change configuration, or start or enable a service.
+
+The installer refuses to replace an existing executable by default. If you are
+replacing an earlier installation, read the [migration guide](docs/uhid-migration.md),
+stop the verified old service, and back up the executable first. To explicitly
+replace the executable after those steps, use:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ownistic/vader3-pro-linux-driver/main/install.sh | sh -s -- --replace
+```
+
+Continue with [device access](#device-access) and [configuration](#configure-and-run)
+before starting the daemon. Device permissions may need to be granted again after
+reconnection.
+
+Maintainers publish binaries by pushing a version tag matching the version in
+`driver/Cargo.toml`, such as `v0.1.0`. The release workflow builds and tests on
+Ubuntu 22.04, then publishes the binary and checksum. The installer always uses
+the latest non-prerelease GitHub release.
+
+### Build from source
+
+Prerequisites:
 
 - Rust 1.75 or later and `cargo`
 - `pkg-config`, BlueZ and D-Bus development headers (`libdbus-1-dev` on
