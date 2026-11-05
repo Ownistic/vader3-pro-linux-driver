@@ -92,7 +92,7 @@ Current-page linkage, trusted publisher verification, extraction, and relevant
    [DInput descriptor/GATT comparison](evidence/bluetooth-dinput-mode.md), and
    [first A/B/C/Z capture](evidence/passive-dinput-abcz.md). Continue M1–M4,
    combined-input and standard-control captures before selecting a parser.
-   Owner-authorized read-only ACL enabled the first capture; recheck scoped
+   Read-only ACL I authorized enabled the first capture; recheck scoped
    access after reconnection rather than broadening privileges.
 2. In parallel with static analysis, evaluate padctl's native protocol options
    against six-extra/motion requirements; do not treat generic evdev or separate

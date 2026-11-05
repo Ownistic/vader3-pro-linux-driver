@@ -77,7 +77,7 @@ form to hardware.
 ### Normal DInput input report (passive, already verified on hardware)
 
 Report ID `0x01`, 21 bytes on the wire (descriptor declares 15). Field map from
-the owner-coordinated captures is in `docs/PROTOCOL.md`; the D-pad is a hat in
+my coordinated captures is in `docs/PROTOCOL.md`; the D-pad is a hat in
 byte 9's low nibble and M1–M4 are byte 11 bits, i.e. the two are separate fields.
 
 ### Vendor / origin report (32 bytes, unverified on hardware)
@@ -174,7 +174,7 @@ the natural rumble candidate — but no Bluetooth delivery path has been proven.
 Joystick derived directions occupy indices 161–168 (`lup`…`llu`, `rup`…`rlu`)
 and 160 is the joystick zero. This table is what produced the byte-11 bit order
 `0x04`/`0x08`/`0x10`/`0x20` for M1–M4 and is the strongest available evidence
-for that assignment, since the owner could not confirm press order.
+for that assignment, since I could not confirm press order.
 
 ## Device configuration format (`.fdg`)
 

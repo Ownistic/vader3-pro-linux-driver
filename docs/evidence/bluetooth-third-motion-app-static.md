@@ -378,7 +378,7 @@ Unknown:
 
 Do not add a third-axis field to the current NUS implementation on the strength of
 this app: the vendor host's own parser has no place for it, and the obvious spare
-tail bytes are a cursor pair that the app would misread. If the owner wants real
+tail bytes are a cursor pair that the app would misread. If I want real
 third-axis motion, the established positive contract remains the USB `04 FE 66`
 report (bytes 29/30 for `B2`). Any BLE attempt would need new evidence from the
 firmware's radio/PDU path or a host build that actually parses three axes — not a

@@ -201,7 +201,7 @@ Two statements made earlier in this project are withdrawn:
 
 1. *"`05 EE 01` activated vendor mode over Bluetooth."* Wrong. The report
    content change was stick-axis jitter (`byte 1`, left-stick X, idles near
-   `0xfd`), and the frame count was the owner deliberately nudging the
+    `0xfd`), and the frame count was from my deliberate nudging of the
    controller to keep it awake. Vendor mode was never entered. The M1-in-byte-7
    signature of vendor mode was never observed over Bluetooth.
 

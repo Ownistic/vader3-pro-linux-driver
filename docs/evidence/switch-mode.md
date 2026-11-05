@@ -1,6 +1,6 @@
 # Switch mode: gyro and rumble over Bluetooth, no vendor protocol
 
-Measured on the owner's Vader 3 Pro, firmware **6.7.5.1**, over Bluetooth, in the
+Measured on my Vader 3 Pro, firmware **6.7.5.1**, over Bluetooth, in the
 controller's Nintendo Switch personality (FN+Y until the indicator is blue).
 Everything below is hardware-observed on this machine, not inferred.
 
@@ -44,13 +44,13 @@ available on stock firmware, over Bluetooth, with no command to send.
 `FF_TRIANGLE`, `FF_SINE` and `FF_GAIN` (0x60).
 
 Verified by uploading a `FF_RUMBLE` effect with `EVIOCSFF`, playing it for 2 s and
-stopping it: **the owner felt it and it stopped on its own.** No NUS write, no
+stopping it: **I felt it and it stopped on its own.** No NUS write, no
 vendor frame, no periodic retransmission — the kernel driver handles all of it.
 
 ## The extra buttons do not exist in this mode
 
 Buttons occupy bytes 3–5 of the 49-byte `0x30` input report. Over a 60-second
-capture in which the owner pressed **M3, M4, C and Z**, those three bytes stayed
+capture in which I pressed **M3, M4, C and Z**, those three bytes stayed
 constant at `00 80 00` across all 400 distinct frames. Every other varying byte
 was the timer, the sticks, or IMU samples.
 

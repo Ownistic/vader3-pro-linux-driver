@@ -3,8 +3,8 @@
 ## Scope and tested baseline
 
 Branch `feat/uhid-emulation`; starting HEAD `d45e356`. Existing research and
-decoder work was preserved and committed as `0a9e333` and `ab522e8` at the
-owner's request. Baseline `cargo test`: 109 passed. The isolated spike has
+decoder work was preserved and committed as `0a9e333` and `ab522e8` at
+my request. Baseline `cargo test`: 109 passed. The isolated spike has
 three passing example tests. Rust-analyzer is unavailable locally; Cargo is
 the authoritative Rust check.
 
@@ -12,11 +12,11 @@ Allowed: isolated spike, opt-in `[pad] backend = "uhid"`, motion-shaped NUS
 input and HID output rumble, regression tests, README and evidence/handoff.
 Default uinput behavior and existing config keys must remain unchanged.
 No changes under `local/research/`, no flashing, and no `13 04 00 00` or
-`13 05` commands. Owner actions and felt/UI results require confirmation.
+`13 05` commands. My actions and felt/UI results require confirmation.
 
 ## Compatibility gate
 
-The owner confirmed **Recognized; gyro available** for the synthetic
+I confirmed **Recognized; gyro available** for the synthetic
 DualSense Edge on the Legion Go running Bazzite. See
 [spike evidence](uhid-dualsense-probe.md) for revision, binary/source hashes,
 host kernel and observed feature/output traffic. The synthetic probe has been
@@ -26,7 +26,7 @@ or final daemon behavior.
 ## AC power-cycle gate
 
 Host: Legion Go via SSH alias `legion`, account `deck`, kernel
-`7.2.11-ogc4.1.fc44.x86_64`. The owner confirmed the Vader was connected there
+`7.2.11-ogc4.1.fc44.x86_64`. I confirmed the Vader was connected there
 without being power-cycled. BlueZ named the connected/resolved device
 `Flydigi VADER3P`. The standalone diagnostic scopes discovery to that exact
 name and refuses ambiguous NUS devices; no addresses or complete notifications
@@ -42,7 +42,7 @@ Remote location: `/tmp/flydigi-uhid-spike-ab522e8/nus_selector_probe.py`.
    notifications ending `FE 00`. The `BA 40 00 00` query's write was accepted,
    but **no AC C0 status** was observed. Do not infer selector value from the
    query write or treat it as a proven status query on this live firmware.
-2. The owner confirmed fully powering off for about five seconds, turning on
+2. I confirmed fully powering off for about five seconds, turning on
    in the same Bluetooth DInput mode, and reconnecting to the Legion Go.
 3. `python3 .../nus_selector_probe.py --seconds 15` (strictly passive):
    connected/resolved; StartNotify accepted; **zero notifications**.
@@ -66,8 +66,8 @@ No physical axis, sign, scale, sensor sample rate or third component is proven.
 
 | Criterion | Result | Evidence / remaining work |
 | --- | --- | --- |
-| Steam supported controller and gyro UI | Spike passed; final backend pending | Owner confirmation for `ab522e8` synthetic spike |
-| Standard-path rumble and autonomous stop | Pending | Requires owner felt confirmation through final HID output path |
+| Steam supported controller and gyro UI | Spike passed; final backend pending | My confirmation for `ab522e8` synthetic spike |
+| Standard-path rumble and autonomous stop | Pending | Requires my felt confirmation through final HID output path |
 | M1–M4 and C separate; Z documented | Pending | Test one control at a time in Steam |
 | Suppression and reconnect without daemon restart | Pending | Final daemon hardware test |
 | Motion-active latency versus 130 reports/s, 0.03 ms median | Pending | Same measurement boundary and physical input activity required |
@@ -114,7 +114,7 @@ warnings are seven transmute annotations, three type-complexity warnings, an
 unused import in `signal_probe.rs`, and an unused variable in `sdl_probe.rs`.
 No old-code regression demonstration or final independent verifier ran.
 
-The owner reconnected the physical controller after it disconnected during
+I reconnected the physical controller after it disconnected during
 implementation. The readable physical node was `/dev/hidraw8`, ID
 `04b4:2412` on bus 5, matching the known alternate personality. The installed
 `vader3p-steam.service` was stopped temporarily, not replaced. The test binary
@@ -136,7 +136,7 @@ BLE worker: cleanup; notifications=0, motion=0, selector=None; selector not rest
 ```
 
 The first inspected log already contained more than three consecutive
-selector-write failures. The owner's repeated-blocker stop condition was
+selector-write failures. My repeated-blocker stop condition was
 therefore reached: **no more experiments or repairs were attempted**. The
 test was stopped and the original installed service restarted. The saved
 complete journal counted 37 automatic retries before shutdown; periodic
@@ -152,12 +152,12 @@ physical `/dev/hidraw8`, exclusive grab of `/dev/input/event16`, Nordic UART
 rumble selection, and the original translated virtual pad created. These
 observations establish restoration/startup, not a newly felt rumble test.
 
-No final owner button, rumble, gyro, suppression, reconnect or latency test
+No final button, rumble, gyro, suppression, reconnect or latency test by me
 was performed on the integrated backend. Physical axes, signs, units and a
 third component remain unresolved; bytes 14–17 were not decoded or guessed.
 Z is encoded as microphone/mute but its Steam bindability remains unproven.
 
-If the owner authorizes resuming beyond the stop limit, the next concrete
+If I authorize resuming beyond the stop limit, the next concrete
 action is to preserve/report the worker's actual D-Bus write error and compare
 its selector request with the successful scoped Python diagnostic. Then rerun
 the controlled hardware ladder, regression demonstration and final gates.

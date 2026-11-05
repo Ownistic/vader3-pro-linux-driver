@@ -1,153 +1,126 @@
-# Vader 3 Pro Linux Driver
+# Flydigi Vader 3 Pro for Linux
 
-This pre-1.0 userspace daemon translates a Flydigi Vader 3 Pro in Bluetooth
-DInput mode into a virtual DualSense Edge via `/dev/uhid`. Linux needs the
-`hid-playstation` driver. USB and the 2.4 GHz dongle are not supported product
-transports. The daemon does not install kernel modules or change Steam settings.
+This pre-1.0 daemon translates a Vader 3 Pro in Bluetooth DInput mode into one
+virtual DualSense Edge through Linux UHID. It targets Linux systems with the
+`hid-playstation` driver. Physical USB and the 2.4 GHz dongle are not supported.
 
-The owner reported that all controls except gyro Z worked on the earlier v4
-test build. Steam visibility was confirmed with only the emulated DualSense Edge
-listed after a separate physical-device ignore setting. Those observations do
-not validate this build. Sensor calibration, reconnect, latency, and end-to-end
-rumble remain hardware acceptance gates. See [v4 evidence](docs/evidence/uhid-runtime-retest-2026-11-04.md)
-and [testing](docs/TESTING.md). Historical uinput measurements do not establish
-UHID performance. Full PRD acceptance is not claimed.
+## Capabilities and status
 
-## Build
+- Sticks, analog triggers, D-pad and standard buttons.
+- Six independent extra buttons: C, Z and M1–M4.
+- Rumble feedback forwarded over Bluetooth.
+- Experimental motion input maps two uncalibrated components to pitch and yaw.
+- The virtual controller remains available across physical disconnects; reconnect
+  and other hardware behavior still need current-build acceptance testing.
 
-If you are upgrading an existing installation, follow the
-[migration guide](docs/uhid-migration.md) before replacing its executable or
-starting a second daemon.
+In my earlier v4 Steam test, all controls worked except gyro Z. That observation
+applies to the tested v4 artifact, not automatically to this build. I have not
+hardware-retested the current pitch correction. The third gyro component is not
+available in the implemented motion input, and the virtual acceleration values
+are fabricated rather than measured. Calibration and motion remain experimental.
 
-Install Rust 1.75 or later, pkg-config, and libdbus development headers
-(`libdbus-1-dev` on Debian/Ubuntu, `dbus-devel` on Fedora, `dbus` on Arch).
-From this checkout:
+The daemon does not install kernel modules, change Steam settings, or unbind
+drivers. Physical-device hiding in Steam is a separate, optional manual setting;
+see the [visibility guide](docs/steam-controller-visibility.md). The daemon's
+physical event grabs do not remove the controller from Steam.
+
+## Install
+
+### Prerequisites
+
+- Rust stable and `cargo`
+- `pkg-config`, BlueZ and D-Bus development headers (`libdbus-1-dev` on
+  Debian/Ubuntu or `dbus-devel` on Fedora)
+- Linux kernel support for `/dev/uhid` and `hid-playstation`
+
+If you are replacing an earlier installation, read the
+[migration guide](docs/uhid-migration.md) before replacing its executable. It
+helps identify and stop only the old, verified service.
+
+Build and install from the repository root:
 
 ```sh
-cd driver
-cargo build --release
-install -Dm755 target/release/vader3p-steam ~/.local/bin/vader3p-steam
+cargo build --manifest-path driver/Cargo.toml --release
+install -Dm755 driver/target/release/vader3p-steam ~/.local/bin/vader3p-steam
 ```
 
-## Device permissions
+### Device access
 
-The user running the daemon needs read/write access to `/dev/uhid`, read access
-to the target physical hidraw node, and access sufficient to open and grab the
-target physical evdev nodes. Identify the actual nodes and IDs first using
-`python3 tools/inventory.py --descriptor` from the repository root and sysfs;
-the observed Bluetooth identity has included `04b4:2412`, not only `d7d7:0041`.
-Bus 5 alone does not prove a physical Bluetooth link. Inspect the matched
-descriptor and node relationships before granting access.
+Run as your normal user, not as a root daemon. That user needs read/write access
+to `/dev/uhid`, read access to the target physical hidraw node, and access to the
+associated evdev node sufficient for the daemon's event grab. Identify the
+controller and related nodes before granting access; do not grant broad device
+permissions.
 
-For a local session, an administrator can grant a temporary ACL on each verified
-node (replace the placeholders with the actual device nodes):
+From the repository root, inventory candidate devices:
+
+```sh
+python3 tools/inventory.py --descriptor
+```
+
+Verify the physical controller's identity and its hidraw/evdev node relationship
+before granting temporary ACLs. For example, replace the node names with the
+verified nodes:
 
 ```sh
 sudo setfacl -m "u:$USER:rw" /dev/uhid
-sudo setfacl -m "u:$USER:r" /dev/hidrawN
-sudo setfacl -m "u:$USER:r" /dev/input/eventN
+sudo setfacl -m "u:$USER:r" /dev/hidrawN /dev/input/eventN
 getfacl /dev/uhid /dev/hidrawN /dev/input/eventN
 ```
 
-Grant each associated physical event node separately. Device nodes can change on
-reconnect; recheck identity and ACLs then. For persistent access, have an
-administrator configure narrowly scoped udev/logind ACL rules for the actual
-controller and `/dev/uhid`, respecting local security policy. Do not make nodes
-world-writable or disable SELinux. Access to `/dev/uhid` permits creating virtual
-HID devices and should only be granted to trusted users.
+`/dev/uhid` access lets a user create virtual HID devices, so grant it only to
+trusted users. Device nodes can change after reconnect; verify them and reapply
+temporary ACLs as needed. For persistent access, ask an administrator to
+configure narrowly scoped rules that follow local security policy.
 
-## Configure and run
+### Configure and run
 
-Connect the controller in Bluetooth DInput mode. Create
-`~/.config/vader3p-steam/config.toml` (or pass `--config PATH`):
-
-```toml
-bluetooth_address = "AA:BB:CC:DD:EE:FF" # use the actual address
-rumble = true
-suppress_physical = true
-log_level = "info"
-
-[motion]
-enabled = false # opt in only when experimental motion is desired
-scale = 1
-stale_ms = 100
-swap_xy = true
-invert_x = true
-invert_y = true
-```
-
-Find the address privately with `bluetoothctl devices Connected`. An address is
-required whenever rumble or motion is enabled; rumble defaults to true. For
-input only without an address, explicitly set `rumble = false` and leave motion
-disabled. `virtual_name` defaults to `Flydigi Vader 3 Pro (UHID DualSense Edge)`;
-`poll_ms` defaults to 4 but is accepted only for compatibility and has no effect;
-`log_level` defaults to `info`. Existing configurations with
-`[pad] backend = "uhid"` remain valid; explicit `uinput` is rejected. The
-`vendor_id` and `product_id` fields remain compatibility metadata; discovery
-uses the known target identity or recorded descriptor, not arbitrary configured
-IDs. A descriptor-matched device on bus 5 may still be a forwarded dongle.
-
-Run `~/.local/bin/vader3p-steam`, then stop with Ctrl+C. With motion disabled,
-ordinary 21-byte physical HID reports supply input. When motion is enabled,
-the experimental NUS stream supplies canonical input once observed; stale or
-lost NUS state is neutralized. Motion uses two uncalibrated values: by default
-the second maps to inverted X (pitch) and the first to inverted Y (yaw).
-`invert_x` and `invert_y` independently control those emulated-axis signs after
-swapping. The unknown third value is zero and acceleration is fabricated, not
-measured. `scale` is a nonzero signed
-i16, and `stale_ms` must be 1–1000. Selector write success does not prove device
-behavior; status and notification counts are observed separately.
-
-The daemon does not restore the motion selector on exit. If the controller is
-still streaming NUS, ordinary 21-byte HID input may be absent after disabling
-motion or returning to native use. A full controller power cycle and reconnect
-cleared the stream in the recorded firmware 6.7.5.1 test; check input after doing
-so. Restarting Steam alone does not reset the controller selector.
-
-Host feedback is forwarded only through Bluetooth NUS, not a USB hidraw sink.
-The Bluetooth rumble frame is exactly 4 bytes: `11 <left> <right> <duration_ms>`.
-Check logs for errors, and confirm actual motor response rather than assuming a
-successful write proves vibration.
-
-`suppress_physical = true` uses a reversible EVIOCGRAB on physical event nodes;
-it blocks evdev events but does not remove the device or prevent hidraw access.
-Steam may still list both devices. For the optional, manual Steam-only ignore
-setting and its reversal, see [controller visibility](docs/steam-controller-visibility.md).
-The daemon never edits Steam configuration or binds/unbinds kernel drivers.
-
-## Upgrade from the former uinput setup
-
-The current daemon creates only the virtual DualSense Edge through UHID. It does
-not need the old SDL mapping or uinput service. Follow the [migration guide](docs/uhid-migration.md)
-before replacing an existing installation. The guide identifies the former
-artifact paths, verifies ownership before changing them, and does not recreate or
-enable a service automatically.
-
-For a new installation, first run the daemon in the foreground and confirm that
-the controller works. The daemon requires the controller to be connected at
-startup. If you then want a user service, use the optional unit and steps in the
-[migration guide](docs/uhid-migration.md). Do not enable it until its
-configuration and device permissions work in the foreground.
-
-## Development and evidence
+Connect the controller in Bluetooth DInput mode before starting the daemon. Make
+the configuration directory and create
+`~/.config/vader3p-steam/config.toml`:
 
 ```sh
-cd driver
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all-targets
-cargo build --release
-cd ..
-python3 -m unittest discover -s tests -v
+mkdir -p ~/.config/vader3p-steam
 ```
 
-See [architecture](docs/ARCHITECTURE.md), [protocol](docs/PROTOCOL.md),
-[testing](docs/TESTING.md), [evidence](docs/evidence/), and [PRD](PRD.md).
-The BLE and UHID examples are diagnostics, not hardware acceptance tests.
+```toml
+bluetooth_address = "AA:BB:CC:DD:EE:FF" # replace with the controller address
+rumble = true
+
+[motion]
+enabled = false
+```
+
+Find the connected controller address with `bluetoothctl devices Connected`.
+Motion is opt-in; set `enabled = true` only to try experimental pitch/yaw input.
+See the [configuration reference](ARCHITECTURE.md#configuration-reference) for
+all options and defaults.
+
+Start the daemon in the foreground and stop it with Ctrl+C:
+
+```sh
+~/.local/bin/vader3p-steam
+```
+
+The controller must be connected at startup. Confirm device behavior directly;
+a successful transport write does not prove that the controller acted on it.
+Test the foreground run before configuring an optional
+[user service](docs/uhid-migration.md#optional-user-service-for-a-new-installation). Motion mode
+does not restore the controller's selector on exit; returning to ordinary input
+may require a full controller power cycle and reconnect. Restarting Steam alone
+does not reset the selector. See [architecture](ARCHITECTURE.md) for details.
+
+## References
+
+- [Architecture and configuration reference](ARCHITECTURE.md)
+- [Bluetooth protocol reference](VADER3P_PROTOCOL.md)
+- [Testing and current acceptance gaps](docs/TESTING.md)
+- [Migration from the former uinput setup](docs/uhid-migration.md)
+- [Manual Steam visibility setting](docs/steam-controller-visibility.md)
+- [Historical protocol ledger](docs/PROTOCOL.md)
 
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).
-Contributions are dual-licensed under the same terms unless explicitly stated
-otherwise. Proprietary firmware and applications used for research are not
-included. This project is not affiliated with Flydigi or Valve.
+Proprietary firmware and applications used for research are not included. This
+project is not affiliated with Flydigi or Valve.

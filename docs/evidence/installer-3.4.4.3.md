@@ -4,7 +4,7 @@
 
 | Field | Observation |
 | --- | --- |
-| Candidate URL supplied by owner | `https://tencent-android.cdn.flydigi.com/PC/Space%20Station3.0/FlydigiSpaceStation_setup_3.4.4.3_Release.exe` |
+| Candidate URL I supplied | `https://tencent-android.cdn.flydigi.com/PC/Space%20Station3.0/FlydigiSpaceStation_setup_3.4.4.3_Release.exe` |
 | Official page | `https://shops.flydigi.com/pages/game-center` returned HTTP 429 during setup |
 | CDN availability | HTTPS HEAD and download succeeded; HTTP 200 |
 | Byte length | `105741288` |
@@ -12,7 +12,7 @@
 | Local artifact | `/tmp/opencode/flydigi/official/FlydigiSpaceStation_setup_3.4.4.3_Release.exe` (outside Git, temporary storage) |
 | Format | x86 PE32; 7-Zip identifies Inno Setup, product resource 3.4.4.3 |
 | Authenticode | **Unverified**: certificate table observed, `osslsigncode` unavailable; existence of a certificate is not a valid signature/trust chain |
-| Provenance conclusion | Owner-supplied Flydigi-domain candidate is operational; current official-page linkage and publisher authentication are unresolved |
+| Provenance conclusion | The Flydigi-domain candidate I supplied is operational; current official-page linkage and publisher authentication are unresolved |
 | Execution | None; downloaded/listed/parsed only |
 
 The hash identifies the acquired bytes. It is not an independently published

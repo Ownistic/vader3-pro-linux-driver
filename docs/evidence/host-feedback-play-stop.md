@@ -81,7 +81,7 @@ fail.
 
 | Check | Result |
 | --- | --- |
-| One 1.5 s effect, then stop | buzzed once and stopped, confirmed by the owner |
+| One 1.5 s effect, then stop | buzzed once and stopped, as I confirmed |
 | A | `BTN_SOUTH` (304) |
 | X | `BTN_NORTH` (307) |
 | M1 | `BTN_TRIGGER_HAPPY3` (706) — extra slot 2, which is M1 by the documented order C, Z, M1, M2, M3, M4 |

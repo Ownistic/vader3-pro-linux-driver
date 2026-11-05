@@ -2,7 +2,7 @@
 
 ## Current: UHID-only cleanup and local main integration complete
 
-The owner authorized removing the old backend and merging `feat/uhid-emulation`
+I authorized removing the old backend and merging `feat/uhid-emulation`
 into local `main`. The previously uncommitted runtime fixes and research were
 preserved in checkpoint `before-uhid-only-cleanup`. Baseline at `cb7895a` plus
 those changes: `cargo test --all-targets` passed 145 tests. The saved scope and
@@ -12,7 +12,7 @@ probes and mapping/scripts. The sole startup path is DualSense Edge UHID. Existi
 UHID configs remain readable; explicit uinput selection fails. Implementation
 checks now pass 88 Rust tests, 35 Python tests, strict Clippy, formatting and
 release build after migration-guide repairs, BlueZ unique-owner authentication
-and the owner's independent pitch-inversion correction. Independent verifier,
+and my independent pitch-inversion correction. Independent verifier,
 reviewer and scoped convergence all passed for driver manifest
 `3becafa68e0a7aecb3d62d2e839af6c092dfe2c2d576f4919c51f1d608f40acf`
 and release `e8679ac65dda8254839ef1eab620b8e69d1defb2ebef24ae40e5c984c6f84a41`.
@@ -24,7 +24,7 @@ feature branch was retained. No cleanup/integration work remains.
 
 The Legion Go's last hardware-tested installation was v4; this cleanup did not
 replace or restart it. Steam's physical
-`04b4/2412` ignore entry was owner-confirmed to leave only the emulated DualSense
+`04b4/2412` ignore entry was confirmed by me to leave only the emulated DualSense
 Edge visible. Two Bluetooth motion values work; no verified third value exists.
 Historical checkpoints below must not be read as the current implementation or
 as acceptance evidence for the new cleaned build. Deployment and remaining
@@ -34,7 +34,7 @@ hardware acceptance were outside this task.
 
 The optional backend is saved but **not validated or ready for deployment**.
 The first integrated Legion Go run repeatedly failed its AC selector write;
-the first inspected journal already exceeded the owner's three-recurrence
+the first inspected journal already exceeded my three-recurrence
 limit. No further experiment or repair was attempted. The transient test was
 stopped, its Edge HID removed, and the unchanged installed uinput service
 restored active/running (PID 51748). The captured journal counted 37 automatic
@@ -60,7 +60,7 @@ below are historical and do not authorize continuing past the stop condition.
 
 - Active branch: `feat/uhid-emulation`; research checkpoint `0a9e333`, isolated
   spike and decoder checkpoint `ab522e8`. The commit agent packaged the prior
-  uncommitted research at the owner's request; the tree was clean at launch.
+  uncommitted research at my request; the tree was clean at launch.
 - Saved spike: `driver/examples/uhid_dualsense_probe.rs`; evidence:
   `docs/evidence/uhid-dualsense-probe.md`. Existing daemon/uinput behavior is
   unchanged. No files under `local/research/` were changed.
@@ -70,25 +70,25 @@ below are historical and do not authorize continuing past the stop condition.
   lifetime. Kernel `7.3.1-1-cachyos` bound `playstation`, created a readable and
   writable hidraw node plus gamepad, motion, touchpad and headset input nodes.
   This is kernel evidence only, not Steam or physical motion evidence.
-- Next action: owner inspects Steam for the emulated DualSense Edge and gyro
+- Next action: I inspect Steam for the emulated DualSense Edge and gyro
   options while the probe runs. Do not integrate the backend before this gate.
   AC persistence, physical rumble, buttons, suppression/reconnect and latency
   remain untested for UHID. No AC command was sent by the spike.
-- Host correction: Steam is on the owner's Legion Go, accessible using
+- Host correction: Steam is on my Legion Go, accessible using
   `ssh legion`. The local probe finished normally. The same hash-verified
   binary from `ab522e8` is now running for 1,200 seconds from remote
   `/tmp/flydigi-uhid-spike-ab522e8/`; the installed driver is untouched.
   Bazzite kernel `7.2.11-ogc4.1.fc44.x86_64` bound `playstation`, exposed
   hidraw/gamepad/motion nodes and delivered feature requests and output
-  reports. Owner Steam UI observation is still required before integration.
-- The owner subsequently confirmed **Recognized; gyro available** on the
+  reports. My Steam UI observation was still required before integration.
+- I subsequently confirmed **Recognized; gyro available** on the
   Legion Go. Spike gate passed for `ab522e8`. The synthetic probe was stopped,
   exited 0, and its HID node was observed removed. Next: AC persistence check.
   No physical `d7d7:0041` node was found on the Legion Go at this point; ask
-  the owner to establish Bluetooth DInput there before the passive baseline.
-- Owner connected the physical controller on the Legion Go without a power
+  me to establish Bluetooth DInput there before the passive baseline.
+- I connected the physical controller on the Legion Go without a power
   cycle. The diagnostic observed 2,002 candidate notifications in 15 seconds.
-  After an owner-confirmed full power cycle/reconnect, the same subscription
+  After a full power cycle/reconnect I performed, the same subscription
   observed zero. Explicit AC 01 then produced AC C0 selector 1 and 1,531 data
   notifications. The enabled stream did not survive that cycle; exact selector
   value while off and broader persistence remain unproven. Artifact hashes,
@@ -98,13 +98,13 @@ below are historical and do not authorize continuing past the stop condition.
 
 ## Experimental Bluetooth motion implementation (in progress)
 
-The owner requested an opt-in Steam-motion prototype on 2026-11-04. The
+I requested an opt-in Steam-motion prototype on 2026-11-04. The
 Nordic UART TX path has been observed on hardware, but only two processed
 values have been identified; axes, units, third axis and Steam sensor backend
 are unresolved. `driver/src/motion.rs` adds a tested experimental decoder;
 it is not connected to the daemon or exposed to Steam. Baseline `cargo test`
 passed 107 tests; after the decoder it passed 109. Rust-analyzer was
-unavailable to AFT. The owner requires preserving rumble and all existing
+unavailable to AFT. I require preserving rumble and all existing
 features; a UHID experiment that temporarily drops them is not authorized.
 `/dev/uhid` was made accessible during this session. Separate uinput sensor
 nodes are not sufficient for SDL's common-parent association according to
@@ -152,7 +152,7 @@ was "unresolved" is obsolete.
 - Initially empty working tree except `.git/`; no repository AGENTS/override file.
 - Python 3.14.8 available. No baseline tests existed.
 - At baseline no physical controller or Steam test had been performed. A later
-  owner-confirmed connection supplied metadata only; see the live checkpoint.
+  connection I confirmed supplied metadata only; see the live checkpoint.
 - All created project paths are part of this setup task; no preexisting user
   changes were overwritten. No commits or system configuration changes made.
 
@@ -200,7 +200,7 @@ selection remains open; no runtime deployment/permissions/service is installed.
 
 ## Live hardware checkpoint after initial verification
 
-- Owner connected and confirmed the Xbox-named device is the Vader 3 Pro; mode
+- I connected and confirmed the Xbox-named device is the Vader 3 Pro; mode
   may be XInput, not independently established. Metadata-only observation:
   Bluetooth bus `0005`, `045e:02e0`, descriptor 306 bytes, SHA-256
   `74a5dbcedf6d6a88f9eb6e66fbeb5a255ba800fd084390cbf325e0c4c74492d7`.
@@ -210,10 +210,10 @@ selection remains open; no runtime deployment/permissions/service is installed.
   grab, writes, or permission changes attempted. No addresses stored in Git.
 - Saved sanitized descriptor fixture and `docs/evidence/bluetooth-xbox-mode.md`;
   full redacted inventory retained outside Git. All product criteria untested.
-- Owner was asked to switch normally to **Bluetooth DInput** and reconnect for
-  comparison. After the owner reported the switch done, inventory still found
+- I was asked to switch normally to **Bluetooth DInput** and reconnect for
+  comparison. After I reported the switch done, inventory still found
   no d7d7 matches and `bluetoothctl devices Connected` returned no devices.
-  Owner was asked to pair/reconnect the DInput identity in system settings.
+  I was asked to pair/reconnect the DInput identity in system settings.
 - On reconnection, DInput is visible as Bluetooth **d7d7:0041**, descriptor
   163 bytes, SHA-256
   `227924e94560bea5149d6a75a8bb225143a1e4b0685075dea729a30649bc1f22`.
@@ -254,17 +254,17 @@ before selecting runtime architecture. Do not implement a guessed Bluetooth pars
 
 ## Phase 01 passive input checkpoint (after setup closeout)
 
-- Owner reconnected DInput and explicitly ran the suggested per-node temporary
+- I reconnected DInput and explicitly ran the suggested per-node temporary
   ACL. Agent verified readable=true, writable=false; no agent/root-daemon or
   persistent udev permission changes. The older mode0600 restriction above
   describes the baseline, not current effective access.
 - Five-second untouched request yielded zero reports. First 30-second button
-  window yielded 14 axis-jitter packets, but owner confirmed missing that window;
+  window yielded 14 axis-jitter packets, but I confirmed that I missed that window;
   those are not button evidence.
-- Coordinated capture stopped after owner's done reply: 14 reports, ID1,
+- Coordinated capture stopped after my done reply: 14 reports, ID1,
   **21 bytes each**, although the descriptor declares 15 bytes including ID.
   Raw capture flushed incrementally and closed with requested-stop.
-- Owner-completed A/B/C/Z sequence gives A=byte9/10, B=byte9/20,
+- My A/B/C/Z sequence gives A=byte9/10, B=byte9/20,
   C=byte11/01, Z=byte11/02 (hex masks, ID included in offsets), each set/clear.
   C/Z differ from A/B in this sample; combinations and M1–M4 remain untested.
 - External source `/tmp/opencode/flydigi/passive-dinput-coordinated-dqsg8uzu.jsonl`,
@@ -287,7 +287,7 @@ before selecting runtime architecture. Do not implement a guessed Bluetooth pars
 
 ## Session 5-7 capture increment: full DInput control map
 
-Owner ran four more coordinated capture batches back-to-back (stop-on-"done",
+I ran four more coordinated capture batches back-to-back (stop-on-"done",
 read-only, no output commands). Tooling: the saved reusable recorder
 `tools/capture_reports.py` (argparse: `--vid/--pid/--node/--max-seconds/--max-reports/--out/--correlation-id`).
 
@@ -295,7 +295,7 @@ read-only, no output commands). Tooling: the saved reusable recorder
   `0x01`→`0xff` (true analog, 90 sample steps on a slow press); RT = byte10
   `0x08` + byte14; Home = byte12 `0x80` (isolated); C/Z reconfirmed byte11
   `0x01`/`0x02`.
-- Session 5 (M1-M4 isolated, owner-confirmed presses): M1/M2/M3/M4 emit byte11
+- Session 5 (M1-M4 isolated, presses I confirmed): M1/M2/M3/M4 emit byte11
   `0x04`/`0x08`/`0x10`/`0x20` — identical to the D-pad bits. In passive DInput,
   the M keys cannot be distinguished from the D-pad. Session-1 byte10
   `0x10`–`0x80` attribution to M1–M4 was wrong: those were Start/Select/L3/R3.

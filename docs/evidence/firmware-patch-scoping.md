@@ -14,7 +14,7 @@ single Steam device has everything.
 Status: **scope only. No patch has been built, tested, or flashed.**
 
 Target artifact: `Telink87_For_F3_Ver6.7.5.1.bin` (`f3_v6.7.5.1.zip`),
-152 068 bytes, SHA-256 `6cba3054…53e20a`. The owner's unit reports **6.7.5.1**
+152 068 bytes, SHA-256 `6cba3054…53e20a`. My unit reports **6.7.5.1**
 from the mobile app, so this image matches the device.
 
 > Rumble no longer motivates a patch: it works on stock firmware over the Nordic
@@ -139,7 +139,7 @@ remaining fields are not established, and the bootloader may check any of them.
 | Side effects of `0x13 05 01` | **Observed once**: the controller disconnected and the bond was lost on this unit |
 | Losing the stock image | Mitigated: 6.7.5.1 retained in `local/research/firmware/` |
 
-The owner has one unit of this model and needs it daily. A brick is not a
+I have one unit of this model and need it daily. A brick is not a
 recoverable inconvenience.
 
 ## Recommended order

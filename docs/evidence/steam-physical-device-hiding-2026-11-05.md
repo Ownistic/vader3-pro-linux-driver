@@ -2,7 +2,7 @@
 
 ## Result
 
-After a targeted Steam configuration change and restart, the owner reported:
+After a targeted Steam configuration change and restart, I reported:
 “Only the DualSense Edge Wireless Controller is present now.”
 
 This confirms Steam visibility on the tested system. Buttons, gyro and rumble
@@ -39,7 +39,7 @@ only one controller.
 
 ## Applied change
 
-The owner fully quit Steam and authorized the Steam-only change. A process
+I fully quit Steam and authorized the Steam-only change. A process
 check confirmed zero processes named `steam` before editing.
 
 Configuration file:
@@ -80,7 +80,7 @@ Neither the Steam configuration nor its private backup is included in Git.
 | Entry retained after Steam restart | Pass | Read-back found `controller_blacklist = 04b4/2412` |
 | Same running driver | Pass | PID `60434`, executable hash unchanged |
 | Steam no longer holds physical nodes | Observed in one snapshot | Restarted Steam PID `65317` had no open descriptor matching the current physical hidraw/evdev nodes |
-| One Flydigi controller visible | Owner-confirmed pass | Only “DualSense Edge Wireless Controller” present |
+| One Flydigi controller visible | Confirmed by me | Only “DualSense Edge Wireless Controller” present |
 | Inputs after this edit | Not separately retested | No input regression claim is made from visibility alone |
 
 ## Limits and undo

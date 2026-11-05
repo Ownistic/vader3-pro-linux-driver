@@ -6,7 +6,7 @@ is [UHID-only cleanup](docs/phases/02-uhid-only-cleanup.md).
 
 The standalone Rust daemon now targets Bluetooth DInput and DualSense Edge UHID.
 The earlier generic-uinput implementation and its measurements are historical,
-not evidence of acceptance of the current build. The owner's v4 observation
+not evidence of acceptance of the current build. My v4 observation
 confirmed controls except gyro Z and Steam visibility after a separate ignore
 setting. Current-build hardware checks for sensor calibration, rumble, reconnect,
 latency, and the remaining PRD criteria still need independent evidence. Motion

@@ -3,8 +3,8 @@
 Artifact: `Telink87_For_F3_Ver6.7.5.1.bin`, version `6.7.5.1`, SHA-256
 `6cba30540a0c3ba16acad2b62bb4dd64dfccc28add04914c3720c6ae6a53e20a`.
 Static only: saved corrected decompilation and raw image words, read-only. No
-hardware was used for this note; the live facts quoted are attributed to earlier
-owner captures. No saved Ghidra project was opened and `local/research` was not
+hardware was used for this note; quoted live facts come from earlier captures I
+made. No saved Ghidra project was opened and `local/research` was not
 written.
 
 This note answers one question: **what exactly does the firmware put on the USB
@@ -48,7 +48,7 @@ writes these fields (§2), so the declared logical range is not enforced on the
 device side.
 
 **Layering, checked against the earlier capture:** the constructor writes exactly
-`0x20` = 32 bytes *including* the report ID as byte 0, and the owner's hidraw
+`0x20` = 32 bytes *including* the report ID as byte 0, and my hidraw
 capture of the same stream was 32 bytes beginning `04 FE 66`. The two match 1:1 —
 there is no host-side report-ID insertion on this interface and no truncation.
 That is a size-level confirmation, not a field-level one.
@@ -101,8 +101,8 @@ sit at 26-27 and 29-30, with byte 25 (sensor status) and byte 28 (device status)
 interleaved. A naive "read words at 26,28,30" parser is wrong.
 
 **Ordinary input is present:** bytes 7, 9 and 10 carry the button bitmap and
-bytes 17, 19, 21, 22, 23, 24 carry axes/triggers, which matches the earlier
-owner captures (extras at byte 7, control press at byte 9 bit `0x10`).
+bytes 17, 19, 21, 22, 23, 24 carry axes/triggers, which matches my earlier
+captures (extras at byte 7, control press at byte 9 bit `0x10`).
 
 **No clipping or scaling** happens in this builder: each field is cast to a byte
 directly. The six motion words are whatever the sensor pipeline left at
@@ -149,8 +149,8 @@ The motion shape always begins `04 FE 66`.
 
 **Personality gate:** `0x845e20` is the USB personality byte. Value `1` takes the
 path above; value `2` calls `FUN_00019b9c`/`FUN_0001aaf4`/`FUN_0001a190`
-instead; other values do nothing here. The 500 Hz `04 FE 66` stream observed by
-the owner therefore corresponds to `0x845e20 == 1`.
+instead; other values do nothing here. The 500 Hz `04 FE 66` stream I observed
+therefore corresponds to `0x845e20 == 1`.
 
 ## 4. A vendor-mode flag; no command required in the observed USB session
 
@@ -164,7 +164,7 @@ else if (cVar1 == -0x12) {            // subcommand 0xEE
 ```
 
 with `state` = `0x846ac8` (literal `0x183bc`). The output report is report ID 5,
-so the frame the owner used — **`05 EE 01`** — is exactly `report ID 5`, payload
+so the frame I used — **`05 EE 01`** — is exactly `report ID 5`, payload
 `EE 01`, which sets `0x846ac8 + 0x2a = 1`; `05 EE 00` clears it. This is a
 non-flashing, non-destructive configuration bit and it is not in the prohibited
 `13 04` / `13 05` family.
@@ -202,7 +202,7 @@ changing while the controller moves proves the rebuild branch is live.
    have this shape and their apparent button fields may be counters. Do not
    claim an unambiguous normal/debug discriminator has been established.
 7. Do not assume a rate: the send path alternates on a toggle, so the effective
-   report rate is a scheduling property, not a protocol constant. The owner's
+   report rate is a scheduling property, not a protocol constant. My
    earlier capture measured 500 Hz in this personality.
 
 **Not established by static analysis, and required before exposing a third axis:**
@@ -215,7 +215,7 @@ artifact cannot answer — the firmware writes the word without naming it.
 * **Observed (static):** descriptor bytes and report IDs; the byte map and its
   sources; the two frame shapes; the scheduling gates; the FIFO readiness bits;
   the `0xEE` flag handler; the personality byte values.
-* **Observed (prior owner captures, quoted not re-measured):** 32-byte `04 FE 66`
+* **Observed (my prior captures, quoted not re-measured):** 32-byte `04 FE 66`
   stream at 500 Hz in DInput personality; buttons at byte 7 and byte 9; sticks at
   bytes 17, 19, 21, 22; the `05 EE 01` command switching the stream.
 * **Inferred:** that `+0x2e` is a streaming counter, so the rebuild branch runs
@@ -227,7 +227,7 @@ artifact cannot answer — the firmware writes the word without naming it.
 ## 7. Verification this note does not claim
 
 No controller was connected, no report was written, no personality was changed.
-The `05 EE 01` bytes above are documented from the image and from the owner's
+The `05 EE 01` bytes above are documented from the image and from my
 earlier capture; they were not sent by this analysis. Passive enumeration plus
 one motion-only capture in the current personality is sufficient to confirm the
 byte map without changing any device state.

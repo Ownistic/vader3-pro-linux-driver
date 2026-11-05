@@ -11,7 +11,7 @@
 This settles the assumption the firmware patch scoping rested on: **the report the
 vendor-mode flag selects really does contain live sensor data.**
 
-Environment: owner's Vader 3 Pro, wired, DInput (Classic) mode, on Linux. The
+Environment: my Vader 3 Pro, wired, DInput (Classic) mode, on Linux. The
 command was written to `/dev/hidraw11` (`mi_02`, the interface the Windows
 application uses for DInput commands).
 
@@ -48,7 +48,7 @@ of 4 900–21 700. The three `11`–`16` pairs therefore carry angular rate, and
 `29:30` pair has the widest range of all — consistent with acceleration.
 
 Sticks are at bytes 4–6 and read `00 00 00` when untouched, so the separation is
-clean: the earlier confusing capture had the owner's hand on the sticks.
+clean: I had my hand on the sticks during the earlier confusing capture.
 
 ## Why this matters
 
@@ -64,7 +64,7 @@ The whole firmware patch plan hinged on an untested assumption: that
 
 ## The extras are in the same report
 
-A 40-second capture in vendor mode with the owner pressing M1, M2, M3, M4, C, Z
+A 40-second capture in vendor mode while I pressed M1, M2, M3, M4, C, Z
 and finally A, three seconds apart, isolates the button field. Ignoring the noisy
 sensor bytes, the presses appear as **byte 7** taking one bit each, in the order
 they were pressed:

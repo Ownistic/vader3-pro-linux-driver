@@ -1,6 +1,6 @@
 # Flydigi Vader 3 Pro: native Steam Input over Bluetooth on Linux
 
-Status: requirements supplied by the project owner; initial setup authorized.
+Status: requirements I supplied; initial setup authorized.
 
 ## 1. Objective
 

@@ -2,12 +2,12 @@
 
 ## Authorization and outcome
 
-The owner requested removal of the old virtual-controller backend and merging
+I requested removal of the old virtual-controller backend and merging
 `feat/uhid-emulation` into local `main`. Make the current DualSense Edge UHID
 runtime the only product path. Preserve working Bluetooth input, NUS motion,
 feedback, reconnect neutralization and physical evdev grabbing.
 
-The owner separately requires Bluetooth-only product support. USB reference
+I separately require Bluetooth-only product support. USB reference
 research and historical evidence remain documentation, not supported backends.
 
 ## Baseline and boundaries
@@ -47,7 +47,7 @@ research and historical evidence remain documentation, not supported backends.
 | Independent gates | Verifier, risk-based reviewer, scoped convergence; fix returned blockers |
 | Git integration | Coherent commits, clean working tree, local main contains cleaned branch |
 
-The earlier owner hardware observations apply to the recorded v4 executable,
+My earlier hardware observations apply to the recorded v4 executable,
 not automatically to the new build. The third Bluetooth motion component remains
 zero; sensor units/calibration and outstanding hardware gates remain limitations.
 This cleanup is not a declaration that all original PRD acceptance checks pass.
@@ -71,7 +71,7 @@ and Clippy checks supply the authoritative build evidence.
 No cleaned build has been installed or tested on hardware. Next: independent
 verification, then risk-based review, scoped convergence and Git integration.
 
-### Gate corrections and owner steering
+### Gate corrections and my direction
 
 - Initial independent verification passed all code checks but blocked the missing
   upgrade path for existing services and SDL mapping overrides. Added
@@ -82,7 +82,7 @@ verification, then risk-based review, scoped convergence and Git integration.
   methods and matches to BlueZ's resolved unique owner, checks sender headers in
   callbacks, and authenticates ownership-change invalidation. Three hardware-free
   security tests cover spoofed broadcast/unicast and ownership changes.
-- The owner reported inverted pitch but correct yaw on the running v4 daemon.
+- I reported inverted pitch but correct yaw on the running v4 daemon.
   Added independent `motion.invert_x = true` by default. Yaw inversion remains
   unchanged. Tests cover emitted report values, independent signs, swapping,
   zero third component and extreme scale. This correction is not hardware-verified.

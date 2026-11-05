@@ -11,9 +11,9 @@ in [ci.yml](../.github/workflows/ci.yml); local runs are not remote CI results.
 
 ## Hardware acceptance remains open
 
-The owner reported controls working except gyro Z on the earlier v4 build and
-confirmed only the virtual DualSense Edge remained visible in Steam after a
-manual physical-device ignore setting. See
+In my earlier v4 test, controls worked except gyro Z, and I confirmed that only
+the virtual DualSense Edge remained visible in Steam after a manual
+physical-device ignore setting. See
 [v4 runtime evidence](evidence/uhid-runtime-retest-2026-11-04.md) and
 [visibility guide](steam-controller-visibility.md). These are observations of a
 particular artifact, not blanket acceptance of later builds. Earlier generic

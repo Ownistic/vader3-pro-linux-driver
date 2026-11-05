@@ -146,7 +146,7 @@ required.
 
 ## Feasibility: what static analysis can and cannot settle
 
-The owner confirms this unit has a gyro, having used it from the Windows app
+I confirm this unit has a gyro, having used it from the Windows app
 (whether over USB or Bluetooth was not recorded). That removes the earlier "maybe
 there is no IMU" uncertainty, so the question is now purely transport:
 

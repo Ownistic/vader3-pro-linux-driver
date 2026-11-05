@@ -298,12 +298,12 @@ claimed. The analyzed image's SHA-256 was unchanged after the pass.
 
 ## Live correction: physical X and Y labels
 
-In a subsequent owner-coordinated passive capture during the candidate daemon
+In a subsequent passive capture I coordinated during the candidate daemon
 run with SHA-256 prefix `db1368d855049d3b`, physical X held for two seconds
 produced 268 data notifications; all had byte 4 masked by `0xf0` equal to `0x80`
 and byte 5 masked by `0x03` equal to zero. Physical Y held for two seconds
 produced 269 data notifications; all had byte 4 equal to zero and byte 5 masked
-by `0x03` equal to `0x01`. The owner observed X as Triangle and Y as Square
+by `0x03` equal to `0x01`. I observed X as Triangle and Y as Square
 with the initial implementation. The original static inference of those two
 physical labels was reversed. This does not establish a firmware change or the
 installed firmware revision; it corrects the mapping for the observed device.

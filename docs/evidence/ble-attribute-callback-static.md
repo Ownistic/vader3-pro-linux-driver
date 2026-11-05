@@ -59,7 +59,7 @@ changes were discarded afterward.
 
 This establishes an instruction-level connection for the saved image; it does
 not identify a GATT motion notification, prove BLE behavior for every mode, or
-establish the physical device's installed revision. The existing owner-reported
+establish the physical device's installed revision. My report of the controller's
 rumble response remains separate hardware evidence.
 
 ## Attribute consumer and write-branch validation

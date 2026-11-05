@@ -296,7 +296,7 @@ record the prior state and restoration strategy, and verify a device response
 rather than treating transport acceptance as success. Isolated stationary,
 single-axis rotation, translation and stick controls would be needed to
 distinguish motion from other inputs; two packed values cannot establish a
-complete gyro. Ask the owner before any required physical action or after a
+complete gyro. Ask me before any required physical action or after a
 disconnect, and do not run this proposed test as part of static research.
 
 Method: decoded the attribute-table entries and UUID pointers directly from
@@ -307,7 +307,7 @@ static code and unperformed physical tests are separate.
 #### Initial physical notification observation
 
 On 2026-11-04, with repository HEAD `f1f1f26` and the research documents
-uncommitted, the owner connected a Vader 3 Pro in Bluetooth DInput mode.
+uncommitted, I connected a Vader 3 Pro in Bluetooth DInput mode.
 BlueZ reported Nordic UART TX UUID `6e400003-b5a3-f393-e0a9-e50e24dcca9e`
 with `notify` and RX UUID `6e400002-b5a3-f393-e0a9-e50e24dcca9e` with
 `write`. The controller firmware version and its identity relative to the
@@ -316,7 +316,7 @@ statically examined image are not established.
 BlueZ `StartNotify` succeeded; the first 12-second observation at rest
 received **zero notifications**, then `StopNotify` was called. A second
 120-second subscription likewise received **zero notifications**. During
-that window the owner confirmed holding still, rotating left and right, and
+that window I confirmed holding still, rotating left and right, and
 tilting forward and back. The controller remained connected afterward. No
 `AC` selector or other controller command was written in either test.
 Successful subscription means BlueZ accepted the request, not that the
@@ -327,7 +327,7 @@ restoration strategy.
 
 #### Authorized selector-on observation
 
-On 2026-11-04, after the baseline, the owner explicitly authorized changing
+On 2026-11-04, after the baseline, I explicitly authorized changing
 the state. With TX subscribed, a BlueZ `WriteValue` request sent `AC 01` to
 Nordic UART RX. A 20-byte `AC C0` status-shaped notification was observed with
 zero-based byte 10 equal to 1, supporting that the selector changed; this
@@ -335,7 +335,7 @@ conclusion uses the device response, not merely the accepted write. During the
 following 90-second window BlueZ delivered 12,039 notifications in total,
 including the status object and 12,038 20-byte data objects. Bytes 11–13
 included changing values, consistent with the statically traced packed fields.
-The owner confirmed holding still, rotating left/right and tilting forward/back
+I confirmed holding still, rotating left/right and tilting forward/back
 during the observation. The capture did not label individual movements or
 timestamp samples, so it does not establish correlation, physical axes,
 sensor type, scale, or gyro.
@@ -345,14 +345,14 @@ restore other settings. Selector state and persistence after the test are
 unknown; the status response reported 1 during the test. The connected
 controller's firmware revision was not independently determined. No raw
 capture or identifying status bytes are published. A next test should use
-timestamped, separately marked stationary and isolated movements, with the
-owner's participation, and assess whether and how to restore prior state.
+timestamped, separately marked stationary and isolated movements, with my
+participation, and assess whether and how to restore prior state.
 
 #### Marked movement phases
 
 On 2026-11-04, following the selector-on experiment and without another
 selector write, a new Nordic UART TX subscription produced data during four
-owner-confirmed phases. The listener decoded bytes 11–13 into two 12-bit
+phases I confirmed. The listener decoded bytes 11–13 into two 12-bit
 values and **hypothetically** interpreted each as two's-complement signed.
 It accumulated minimum, maximum and count per monotonic-timestamped phase;
 individual packets and identifying fields were not saved to the repository.
@@ -378,9 +378,9 @@ then determine signed representation and scale before implementing a driver.
 
 #### Stationary holds, translation and rotation speed
 
-On 2026-11-04 a further owner-assisted Nordic UART subscription used the
+On 2026-11-04 I assisted with a further Nordic UART subscription that used the
 same tentative signed-12-bit decoding, without another selector write.
-The owner confirmed each requested phase; phase boundaries were marked
+I confirmed each requested phase; phase boundaries were marked
 using a monotonic clock and the listener recorded only count and extrema.
 
 | Phase | Notifications | First value range | Second value range |

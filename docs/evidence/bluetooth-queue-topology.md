@@ -157,5 +157,5 @@ All three were written before the 4-byte GATT path was found and are
   excluded; the scan covered direct `FUN_0001c468` calls only.
 - `FUN_00018828`'s `buf` (`0x008477cc`) is shared with the notify path, so the
   `0xBA` branch may be intended for internal loopback rather than host input.
-- The installed firmware version on the owner's unit is still unconfirmed; this
+- The installed firmware version on my unit is still unconfirmed; this
   analysis covers the downloadable 6.7.5.1 build.

@@ -175,9 +175,9 @@ was not inspected.
 
 There is no verified third-component packet contract to implement for the
 current Bluetooth connection. Keep the working two-component daemon unchanged.
-The existing `04 FE 66` USB serializer led to a positive owner-coordinated
+The existing `04 FE 66` USB serializer led to a positive coordinated
 roll observation: see [paired USB/Bluetooth observations](usb-third-motion-observation-2026-11-04.md).
-The owner explicitly retained **Bluetooth-only product scope**, declining a USB
+I explicitly retained **Bluetooth-only product scope**, declining a USB
 backend. The USB finding is a reference, not a change of supported transport.
 
 The selected next investigation is the official Android BLE SDK's receive

@@ -154,8 +154,8 @@ nibble as a small state machine over bits 0–3, producing `1`/`2`/`3`/`4`/`5`/
 
 **This is the independent proof that the M keys and the D-pad are separate
 fields.** Byte 9's low nibble is the hat; M1–M4 are bits 18–21 of the flag word
-scattered into byte 11. Every mask in this table agrees with the
-owner-coordinated captures recorded in `docs/PROTOCOL.md` — including
+scattered into byte 11. Every mask in this table agrees with
+my coordinated captures recorded in `docs/PROTOCOL.md` — including
 `byte 12 0x80 = Home`, which was only ever inferred from a single isolated
 press.
 

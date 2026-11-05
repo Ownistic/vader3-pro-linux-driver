@@ -2,7 +2,7 @@
 
 ## Latest: UHID-only cleanup verified and merged locally
 
-The owner authorized removing the legacy backend and merging into local `main`.
+I authorized removing the legacy backend and merging into local `main`.
 The sole runtime now creates a DualSense Edge through `/dev/uhid`. Legacy uinput
 implementation, generic force-feedback probes, SDL mapping and old contrib
 scripts were removed. Existing `backend = "uhid"` configs remain readable;
@@ -18,7 +18,7 @@ build pass. Review's BlueZ sender-authentication blocker was corrected and
 re-reviewed. Notifications now require the resolved unique owner and authenticated
 ownership changes invalidate samples.
 
-The owner's latest hardware feedback was inverted pitch with correct yaw on
+My latest hardware feedback was inverted pitch with correct yaw on
 the running v4 daemon. Independent `motion.invert_x = true` now corrects pitch
 in code; existing yaw inversion is unchanged. This new executable has **not**
 been deployed or hardware-verified. The Legion Go's earlier v4 artifact and
@@ -35,7 +35,7 @@ Full criteria and gate history: [cleanup record](phases/02-uhid-only-cleanup.md)
 
 ## Latest: Steam shows only the emulated controller
 
-On 2026-11-05 UTC, the owner confirmed that only **DualSense Edge Wireless
+On 2026-11-05 UTC, I confirmed that only **DualSense Edge Wireless
 Controller** remained in Steam after adding `04b4/2412` to the root
 `InstallConfigStore.controller_blacklist` in Steam's `config.vdf` and restarting
 Steam. The physical evdev grab was already active; it did not hide enumeration.
@@ -52,9 +52,9 @@ The background Android BLE investigation finished and saved
 NUS tail as cursor coordinates and finds only two motion values in the inspected
 SDK path. It does not establish a third-axis Bluetooth contract or prove global
 absence. No new controller commands were authorized from the report. Further
-third-axis work is deferred while the owner focuses on documenting visibility.
+third-axis work is deferred while I focus on documenting visibility.
 
-## Latest: owner reports working controls; third motion component unresolved
+## Latest: I report working controls; third motion component unresolved
 
 The resumed hardware checks proved that `AC 01` can return a D-Bus `NoReply`
 while the controller actually answers selector 1 and streams data. The worker
@@ -63,9 +63,9 @@ Rust passive and power-cycled movement probes passed. The integrated daemon
 exposed gyro in Steam but no ordinary controls: zero HID reports with NUS active.
 A focused firmware trace found that AC mode replaces the HID builder and includes
 ordinary inputs in NUS bytes 0–10. A new parser/runtime integration and X/Y swap
-correction are saved. Owner confirmed A, sticks, triggers, M1–M3 and corrected
+correction are saved. I confirmed A, sticks, triggers, M1–M3 and corrected
 axis selection. Physical X/Y labels and yaw sign then needed correction;
-the updated candidate passes 142 tests. After free testing, the owner reported
+the updated candidate passes 142 tests. After free testing, I reported
 everything working correctly except the missing third gyro axis. This confirms
 the current mappings in that test, not independent latency/reconnect evidence.
 The third emulated component remains deliberately zero: no verified third-value
@@ -77,10 +77,10 @@ Remaining hardware checks and independent gates are still open.
 **Not fully accepted.**
 
 USB investigation then found a real third-component candidate: after a data
-cable retry, the owner-confirmed roll capture received 3,943 `04 FE 66` reports
+cable retry, my roll capture received 3,943 `04 FE 66` reports
 in eight seconds; word `+b2` ranged -8,322..8,501 while the other two known
 components remained small. No enable command was sent. USB full-motion support
-is **not implemented** and this does not add a third Bluetooth value. The owner
+is **not implemented** and this does not add a third Bluetooth value. I
 explicitly chose **Bluetooth-only scope**: do not add a USB backend. USB was
 unplugged and Bluetooth reconnected; the unchanged v4 daemon logged physical
 reattach and resumed NUS input. The focused official Android BLE SDK investigation
@@ -88,7 +88,7 @@ completed without live writes; see the latest report link above. Exact USB
 descriptors, field positions and limits:
 [USB third-component observation](evidence/usb-third-motion-observation-2026-11-04.md).
 
-At the owner's explicit request the old installed uinput service/binary were
+At my explicit request the old installed uinput service/binary were
 disabled and archived on the Legion Go. Do not restore them automatically.
 Only transient `vader3p-uhid-test-v4.service` is running, with no time cutoff or
 fallback hook; it is not boot-enabled. Current binary SHA-256:
@@ -103,7 +103,7 @@ Static protocol contract: [NUS input prefix](evidence/nus-input-prefix-static.md
 The optional backend is saved but **not a validated working motion feature**.
 First integrated test on the Legion Go repeatedly failed the worker's AC
 selector write, with no observed status/data. More than three consecutive
-failures were visible, reaching the owner's stop condition. No further repair
+failures were visible, reaching my stop condition. No further repair
 or experiment was attempted. The transient test was stopped and its HID
 removed; the unchanged installed uinput service was restored active/running.
 
@@ -123,9 +123,9 @@ Active branch: `feat/uhid-emulation`. The commit agent saved prior research as
 `ab522e8`. The existing daemon and uinput backend are unchanged. Baseline
 `cargo test`: 109 passed; spike-specific example tests: 3 passed.
 
-Steam is installed on the owner's Legion Go / Bazzite, reached by `ssh legion`
+Steam is installed on my Legion Go / Bazzite, reached by `ssh legion`
 (account `deck`), not the development host. The hash-verified spike from
-`ab522e8` ran there, bound `playstation`, and the owner confirmed Steam
+`ab522e8` ran there, bound `playstation`, and I confirmed Steam
 recognizes it and offers gyro. This passes the initial compatibility gate,
 not physical motion, rumble, extra-button or latency validation. The probe
 has been stopped. Exact artifact hashes, host evidence and limitations:
@@ -133,7 +133,7 @@ has been stopped. Exact artifact hashes, host evidence and limitations:
 
 Next: establish whether the AC-enabled stream survives a controller power
 cycle before permitting daemon AC writes. No `d7d7:0041` node was found on
-the Legion Go after the spike; owner action is needed to connect Bluetooth
+the Legion Go after the spike; I need to connect Bluetooth
 DInput there before the passive baseline. No AC command has been sent by
 this work. Production integration, all hardware validations, regression
 checks and final independent gates remain pending. Do not change
@@ -187,8 +187,8 @@ The saved TX attribute has a client-configuration descriptor; an `AC C0`
 status-shaped notification can report the selector in byte 10. See the
 [subscription and status clues](evidence/static-subsystems-2026-11-04.md#nordic-uart-subscription-and-selector-status-clues)
 and physical follow-up: on 2026-11-04, two accepted TX subscriptions saw no
-notifications at rest or during owner-confirmed movement. No selector command
-was sent in those baselines. In a subsequent owner-authorized `AC 01` test,
+notifications at rest or during movement I confirmed. No selector command
+was sent in those baselines. In a subsequent `AC 01` test I authorized,
 an `AC C0` status reported selector 1 and 12,038 data notifications followed;
 bytes 11–13 changed, but unlabeled movement does not identify gyro axes. The
 selector was not reset after the test; persistence and live firmware version
@@ -384,24 +384,24 @@ reconnect. Over Bluetooth it would drop the link.
 - The flat decompile used for all analysis is
   `local/research/scripts/vader3pro-fixed-decompile.c` — this is the file quoted
   throughout `docs/evidence/`.
-- **hidraw ACLs reset on every reconnect.** Expect to ask the owner for
+- **hidraw ACLs reset on every reconnect.** Expect to ask me for
   `sudo chmod a+r /dev/hidrawN` after each power cycle.
 - The controller's node moves between `hidraw8` and `hidraw9` across reconnects;
   resolve it by walking `/sys/bus/hid/devices` rather than assuming a number.
-- **Capture timing races.** Short windows finish before the owner starts. Use
+- **Capture timing races.** Short windows finish before I start. Use
   long windows (3+ minutes) and analyse by activity detection.
 - A transient **digitizer personality** appeared once (`04B4:2412`, 196-byte
   touch-screen descriptor, three finger contacts). It reports only on touch, so
   captures against it are silent. A reconnect restores the gamepad descriptor.
   Cause not isolated.
 
-## Owner preferences worth honouring
+## My preferences worth honoring
 
 - English only, in replies, code, docs and commits.
 - Hardware experiments are authorized, including commands that may disconnect.
-  When the owner must act — reconnect, grant access, press a button, confirm a
+  When I must act — reconnect, grant access, press a button, confirm a
   felt result — **stop and ask with the `question` tool** rather than guessing.
 - Never present a successful write as proof the device acted. Only an observed
   response counts.
-- Button and control tests must be **one control at a time**, because the owner
+- Button and control tests must be **one control at a time**, because I
   cannot see most console output. Sequences of many presses get confused.

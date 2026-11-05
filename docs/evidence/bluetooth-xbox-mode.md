@@ -2,8 +2,8 @@
 
 ## What was actually observed
 
-After the owner connected the controller, BlueZ reported an Xbox-named connected
-device. The owner explicitly confirmed that this device **is the Vader 3 Pro**,
+After I connected the controller, BlueZ reported an Xbox-named connected
+device. I explicitly confirmed that this device **is the Vader 3 Pro**,
 and noted it may be in XInput mode. This establishes human-confirmed model
 identity, not independent firmware authentication or a confirmed switch setting.
 
@@ -45,7 +45,7 @@ by the agent account**. No device-node open, grab, permission change, input
 capture, feature/output write, or rumble test was attempted. Do not solve access
 by making devices world-writable or running the daemon broadly as root.
 
-The owner was asked to switch through the controller's normal **Bluetooth
+I was asked to switch through the controller's normal **Bluetooth
 DInput** procedure and reconnect, without firmware/permanent configuration
 writes. Next: rerun the inventory, compare descriptor/identity, then establish
 scoped read access before passive reports. Preserve this Xbox-mode baseline.

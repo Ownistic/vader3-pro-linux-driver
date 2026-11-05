@@ -2,7 +2,7 @@
 
 ## Scope and authorization
 
-The owner explicitly requested `PRD.md` first, then setup/scaffolding. Save the
+I explicitly requested `PRD.md` first, then setup/scaffolding. Save the
 requirements, roadmap, research ledger, architecture boundaries, protocol unknowns,
 test matrix, and dependency-light development diagnostics. Start primary-source
 research and official installer acquisition/static inspection as available.

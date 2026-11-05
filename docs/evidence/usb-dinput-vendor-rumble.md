@@ -1,6 +1,6 @@
 # USB DInput vendor HID: rumble works (hardware-verified)
 
-Status: **observed** — the owner felt the controller vibrate, repeatedly and
+Status: **observed** — I felt the controller vibrate, repeatedly and
 sustained. This is the first end-to-end hardware confirmation of a vendor command
 in this project, and it corrects the earlier "rumble is blocked in DInput"
 conclusion, which was based on the Bluetooth personality only.
@@ -60,7 +60,7 @@ Write **32 bytes** to the `mi_02` hidraw node:
 Sustained rumble by **re-sending**: 14 writes of `05 0F 70 70` at 0.3 s intervals
 produced roughly 4.2 s of continuous vibration, then `05 0F 00 00` stopped it. This
 matches the firmware's hard 500 ms timeout in `FUN_0001a0cc` — each new command
-arrives before the previous expires, so the motors never time out. The owner also
+arrives before the previous expires, so the motors never time out. I also
 reported that a first burst ran about 5 s while a second felt slower, consistent
 with the motors still spinning down between bursts rather than with any protocol
 difference.

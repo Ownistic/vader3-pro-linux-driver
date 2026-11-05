@@ -4,7 +4,7 @@ This record describes the initial metadata-only acquisition. Later
 [read-only input capture](passive-dinput-abcz.md) supersedes its access blocker,
 but does not establish output commands or Steam support.
 
-The owner switched modes normally and reconnected the Vader 3 Pro. No firmware
+I switched modes normally and reconnected the Vader 3 Pro. No firmware
 or persistent profile writes were performed by the project.
 
 ## Observed metadata
@@ -66,7 +66,7 @@ rumble or hardware impossibility from these flags.
 - Previous mode: [Xbox-compatible descriptor](bluetooth-xbox-mode.md).
 
 Obtain narrowly scoped, temporary read access to the rediscovered target node
-with owner authorization, then passively capture neutral, individual/combined
+with my authorization, then passively capture neutral, individual/combined
 buttons, axes, and controlled motion. No blanket device permissions or root
 daemon. Preserve both descriptor identities and trace static Windows Bluetooth
 and vendor-GATT code before any output command experiments.

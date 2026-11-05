@@ -34,10 +34,10 @@ read or written. Its sensor samples and calibration are fabricated.
   `--synthetic-gyro` alternates a fabricated X angular velocity, not measured
   motion. The calibration and axes are only a host compatibility hypothesis.
 
-## Owner-run gating experiment
+## My gating experiment
 
 Do not run concurrently with another copy. From the repository root, after
-the owner authorizes the UI test:
+I authorize the UI test:
 
 ```sh
 cargo run --manifest-path driver/Cargo.toml --example uhid_dualsense_probe -- --synthetic-gyro
@@ -48,7 +48,7 @@ It runs for at most 600 seconds; Ctrl-C or SIGTERM tears it down. Use
 kernel version, logs, and whether Steam actually recognizes the virtual pad
 and offers gyro. A successful CREATE2/write or START is not proof of Steam
 recognition or usable gyro. If device-node permissions prevent the experiment,
-ask the owner to grant access; do not run sudo or change ACLs automatically.
+ask me to grant access; do not run sudo or change ACLs automatically.
 
 ## Status and limitations
 
@@ -78,7 +78,7 @@ input58 Virtual DualSense Edge probe
 ```
 
 This establishes host kernel binding and node creation, not Steam support or
-physical sensor delivery. Owner-confirmed Steam recognition and gyro UI are
+physical sensor delivery. My Steam recognition and gyro UI confirmation are
 pending. The process has a 1,200-second lifetime; it must be running during
 the UI observation. No physical controller command was sent.
 
@@ -90,7 +90,7 @@ real device or another instance; the synthetic MAC is not unique per process.
 
 ### Legion Go / Bazzite host run — 2026-11-04
 
-The owner clarified that Steam is installed on the Legion Go, not the initial
+I clarified that Steam is installed on the Legion Go, not the initial
 development host. The local probe exited normally after its bounded lifetime.
 The remote host is accessed as `ssh legion`, account `deck`, kernel
 `7.2.11-ogc4.1.fc44.x86_64`, x86-64, glibc 2.43. The account already had
@@ -119,7 +119,7 @@ The log records `UHID START flags=0x7`, `UHID OPEN`, answered GET feature
 requests for 09/20/05, and host output reports of 63 and 48 bytes. These are
 observed host interactions, not proof that Steam exposes gyro or that any
 physical motor moved. No physical device is read or written by the probe.
-The owner then confirmed **"Recognized; gyro available"** in response to the
+I then confirmed **"Recognized; gyro available"** in response to the
 Legion Go Steam UI check: Steam recognizes the emulated supported controller
 and exposes gyro configuration. This passes the spike gate, not physical
 motion/rumble/button validation. The synthetic probe was stopped with SIGTERM;
@@ -127,4 +127,4 @@ its SSH task exited 0 and a subsequent sysfs inspection found no Edge probe.
 
 Next gate: AC persistence across a physical power cycle. A remote inspection
 found no `d7d7:0041` HID node; physical Bluetooth DInput connection on the
-Legion Go must be established with the owner before continuing.
+Legion Go must be established with me before continuing.

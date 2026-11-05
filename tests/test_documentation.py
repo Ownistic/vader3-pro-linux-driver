@@ -10,6 +10,7 @@ class DocumentationTests(unittest.TestCase):
     def test_required_project_documents_exist(self):
         for name in (
             "PRD.md", "PLAN.md", "PROGRESS.md", "README.md",
+            "ARCHITECTURE.md", "VADER3P_PROTOCOL.md",
             "docs/RESEARCH.md", "docs/PROTOCOL.md", "docs/ARCHITECTURE.md",
             "docs/TESTING.md", "docs/phases/00-setup.md",
             "docs/phases/01-research.md", "docs/OPEN_QUESTIONS.md",

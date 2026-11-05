@@ -2,15 +2,15 @@
 
 ## Scope and versions
 
-Owner reported the running UHID candidate correct except the missing third
+I reported the running UHID candidate correct except the missing third
 gyro axis. Its daemon SHA-256 remains
 `616d9e1b5f2e808561ea2213271e0c5db6136525cbce031caffd6a501da4c715`.
 No product code or daemon deployment changed during this investigation.
 
-The owner selected USB cable investigation. Hardware: controller connected
+I selected USB cable investigation. Hardware: controller connected
 directly to the Legion Go / Bazzite (`ssh legion`). Bluetooth disconnected on
 USB connection. First cable produced no physical USB enumeration; after the
-owner retried a known data cable, USB enumerated. No controller command,
+I retried a known data cable, USB enumerated. No controller command,
 firmware write, mode switch or stream-enable command was sent by this pass.
 
 Firmware analysis contract:
@@ -48,9 +48,9 @@ Private remote capture directory:
 `/tmp/flydigi-usb-passive-e0u2ei9g/` (directory mode 0700; raw captures 0600).
 Raw reports are not committed or printed in full.
 
-## Owner-coordinated roll observation
+## Roll observation I coordinated
 
-Owner selected **Rolling now** after instructions to lift one grip and lower
+I selected **Rolling now** after instructions to lift one grip and lower
 the other, reverse, and keep sticks/buttons untouched. An immediate eight-second
 passive capture of the vendor interface received 3,943 matching reports and no
 other report shapes. Fields were independently decoded from the static contract:
@@ -71,7 +71,7 @@ Private capture: `/tmp/flydigi-usb-roll-rpgdmmhi/reports.bin`, SHA-256
 
 ## Interpretation and limits
 
-The dominant `+b2` response during owner-confirmed roll, with the two known
+The dominant `+b2` response during my roll, with the two known
 components comparatively small, is strong hardware evidence for the missing
 roll component on this USB path. The changing sample words also show that this
 was not merely a fixed USB report being replayed by a stale builder.
@@ -88,7 +88,7 @@ ordinary/extra controls, handle stale data/reconnect, suppress sibling physical
 input interfaces safely, and use a proven USB rumble path rather than assuming
 the Bluetooth writer still applies.
 
-The owner subsequently chose **Bluetooth-only scope**, declining USB backend
+I subsequently chose **Bluetooth-only scope**, declining USB backend
 integration. USB was unplugged, Bluetooth DInput reconnected, and the unchanged
 v4 daemon logged physical reattachment and fresh NUS state. The USB result is
 research evidence and a third-component reference only. No USB implementation
@@ -100,7 +100,7 @@ After restoring Bluetooth, a passive D-Bus observer received 267 NUS
 notifications in two seconds from the daemon's existing subscription. It did
 not call `StartNotify`, change the selector or send controller commands.
 
-The owner then selected **Rolling now** for the same grip-up/grip-down movement.
+I then selected **Rolling now** for the same grip-up/grip-down movement.
 An immediate 8.000990951000858-second capture observed:
 
 - 1,067 notifications, all 20 bytes with the observed `FE 00` suffix.

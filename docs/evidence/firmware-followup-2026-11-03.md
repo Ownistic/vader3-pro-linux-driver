@@ -82,7 +82,7 @@ notification is delivered.
 
 1. Trace the USB framing between `FUN_0001899c` and the captured `04 FE` report,
    and trace sensor source state before assigning raw IMU fields.
-2. If the owner is available, capture one stick axis at a time in USB vendor
+2. If I am available, capture one stick axis at a time in USB vendor
    mode to verify the application-derived offsets and direction.
 3. For Bluetooth status, observe notifications around a single `BA 40 00 00`
    request before trying state-changing commands. Confirm the controller is in

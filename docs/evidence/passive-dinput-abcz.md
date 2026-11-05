@@ -3,10 +3,10 @@
 ## Scope and acquisition
 
 This is an input-research checkpoint, **not Phase 01 completion** or a Steam
-acceptance test. The owner confirmed the Vader 3 Pro and reconnected it in
+acceptance test. I confirmed the Vader 3 Pro and reconnected it in
 Bluetooth DInput (`0005:d7d7:0041`). Firmware remains unknown.
 
-The owner executed a temporary per-node ACL grant for account `work` after the
+I executed a temporary per-node ACL grant for account `work` after the
 agent rediscovered the target node. The agent checked readable=true,
 writable=false. The ACL is a user-authorized local change, not an installed
 udev policy; it must not be treated as reboot/reconnect persistence. Reidentify
@@ -20,10 +20,10 @@ controller configuration, or run as root.
 
 1. Five-second untouched request: zero reports. This does not establish a
    permanent report rate or broken connection.
-2. First 30-second A/B/C/Z request: 14 reports, but the owner confirmed they
+2. First 30-second A/B/C/Z request: 14 reports, but I confirmed I
    **missed the window**. Only small axis-byte changes were observed; do not
    label these packets as button evidence.
-3. Coordinated recording: up to five minutes, stopped after owner replied
+3. Coordinated recording: up to five minutes, stopped after I replied
    **done** to requested press/release **A → B → C → Z**, about two seconds
    apart. Four clear press/release pairs occur in that order. Acquisition
    flushed JSONL records as received; SIGTERM requested a graceful stop and
@@ -34,7 +34,7 @@ or reusable capture CLI. Capture limits were 300 seconds / 20,000 reports /
 4,096 bytes per read, with identity refusal and disconnect/error termination.
 The exact acquired bytes/times are retained for independent offline comparison.
 Per-packet video/action annotations are absent; button associations rely on the
-owner-completed sequence. Repeat/combined-input tests are still required.
+sequence I completed. Repeat/combined-input tests are still required.
 
 ## Observed report facts
 
@@ -76,7 +76,7 @@ the dinput-decode notes saved in session for SHA-256 digests. Sanitized public
   acquired packet and relative monotonic timestamp. No addresses, serials,
   node/host paths, wall-clock times, or unrelated device identities included.
 - The source's start record says `actions_confirmed=false` because it was
-  emitted before the owner acted. The later owner reply and analyst sequence
+  emitted before I acted. My later reply and the analyst sequence
   annotation are separate evidence; the raw log was not retroactively rewritten.
 - Offline fixture tests check shape, ordering, and observed press/release bits;
   they are not a general parser, UHID test, Steam test, or full device validation.
@@ -103,7 +103,7 @@ emit the same bits as the D-pad and were therefore indistinguishable. That was
 
 | evidence | D-pad field (byte 9 low nibble) | byte 11 |
 | --- | --- | --- |
-| session 5, owner-confirmed M1–M4 only, 25 frames | `0x00` in every frame | `0x04`/`0x08`/`0x10`/`0x20` (one per press) |
+| session 5, M1–M4 presses I confirmed, 25 frames | `0x00` in every frame | `0x04`/`0x08`/`0x10`/`0x20` (one per press) |
 | session 3, D-pad only, 783 frames | `1`/`3`/`5`/`7` | `0x00` in every frame |
 | session 1, both exercised, 872 frames | `1`/`3`/`5`/`7` at 80–86 s | `0x04`–`0x20` at 105–107 s |
 
@@ -111,9 +111,9 @@ No frame in any of the seven captures has both fields non-zero, and the two
 fields change at different times in session 1. The D-pad and M1–M4 are separate
 fields; the M keys are independently addressable in passive DInput, so the
 six-extra-button goal does not require a vendor-mode switch. The per-key bit
-order matches FlyDigi's own key table but the owner could not confirm which
+order matches FlyDigi's own key table but I could not confirm which
 physical key was pressed when, so the assignment is table-derived, not
-owner-confirmed. An isolated recapture pressing one named M key at a time would
+confirmed by me. An isolated recapture pressing one named M key at a time would
 settle it.
 
 

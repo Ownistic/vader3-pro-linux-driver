@@ -166,7 +166,7 @@ and meaning remain unresolved.
 
 The historical Bluetooth DInput descriptor is a separate HID-over-GATT
 observation: its recorded hash and services are in
-[Bluetooth DInput](bluetooth-dinput-mode.md). The owner's recorded four-byte
+[Bluetooth DInput](bluetooth-dinput-mode.md). My recorded four-byte
 rumble result is in [Bluetooth rumble](bluetooth-rumble-solved.md), but the
 saved `FUN_00010838` body handles input-driven rumble mapping; it does **not**
 write the payload consumed by `FUN_00010980`. That producer remains unknown,

@@ -7,7 +7,7 @@
 > callback at `0x8b0c`; see [BLE callback trace](ble-attribute-callback-static.md).
 > Also, the
 > installed firmware version on the tested controller was not independently
-> established. The owner's recorded vibration observations are unchanged.
+> established. My recorded vibration observations are unchanged.
 > See [receive-path follow-up](staged-frame-transport-static.md).
 
 Rumble over Bluetooth DInput works on stock firmware 6.7.5.1 with no
@@ -50,7 +50,7 @@ with `duration = 200` produced continuous vibration.
 | Control C (zero strength) | 11 × `11 00 00 C8` | no vibration |
 | Intensity step | low `0x30` → high `0xFA` → medium `0x80`, 2 s each with 2 s silent gaps | felt in **exactly that order**, with distinguishable strength |
 
-The intensity ordering is the strongest evidence: the owner reported weak →
+The intensity ordering is the strongest evidence: I reported weak →
 strong → medium, matching the sent sequence. A false positive would not
 reproduce a three-level ordering.
 

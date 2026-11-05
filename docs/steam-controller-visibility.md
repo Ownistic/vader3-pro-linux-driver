@@ -11,7 +11,7 @@ Wireless Controller** and the physical Bluetooth Flydigi controller. The
 physical controller reported `HID_ID=0005:000004B4:00002412`; the emulated
 controller reported `HID_ID=0003:0000054C:00000DF2`. Adding only the physical
 vendor/product pair to Steam's controller blacklist left the emulated controller
-visible. The owner confirmed that Steam then listed only the DualSense Edge
+visible. I confirmed that Steam then listed only the DualSense Edge
 Wireless Controller. This is a Steam-only visibility change, not kernel-level
 hiding.
 

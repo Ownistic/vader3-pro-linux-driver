@@ -8,6 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_DOCS = (
     ROOT / "README.md",
+    ROOT / "ARCHITECTURE.md",
+    ROOT / "VADER3P_PROTOCOL.md",
     ROOT / "driver/README.md",
     ROOT / "docs/TESTING.md",
     ROOT / "docs/uhid-migration.md",
@@ -22,13 +24,34 @@ def rust_struct_fields(source: str, name: str) -> set[str]:
 
 
 class PublicDocumentationTests(unittest.TestCase):
+    def test_human_owner_narrative_uses_first_person(self):
+        human_owner_patterns = (
+            r"\b(?:the )?owner\s+(?:reported|confirmed|asked|requested|authorized|selected|"
+            r"connected|reconnected|executed|observed|chose|clarified|said|felt)\b",
+            r"\bowner's\s+(?:unit|controller|Vader|Legion Go|hardware)\b",
+            r"\bask the owner\b|\bowner-reported\b|\bowner-confirmed\b|"
+            r"\bowner-coordinated\b|\bowner-completed\b",
+            r"\b(?:the|a|an|earlier)\s+my\b|\bmy\s+my\b",
+        )
+        docs = [path for path in ROOT.glob("*.md") if path.name != "AGENTS.md"]
+        docs.extend(path for path in (ROOT / "docs").rglob("*.md"))
+        docs.extend((ROOT / "tests/fixtures").rglob("*.md"))
+        for path in docs:
+            text = path.read_text()
+            for pattern in human_owner_patterns:
+                with self.subTest(path=path.relative_to(ROOT), pattern=pattern):
+                    self.assertIsNone(re.search(pattern, text, re.IGNORECASE))
+
     def test_all_config_fields_are_documented(self):
         source = (ROOT / "driver/src/config.rs").read_text()
-        readme = (ROOT / "README.md").read_text()
+        docs = "\n".join(
+            (ROOT / name).read_text()
+            for name in ("README.md", "ARCHITECTURE.md")
+        )
         for struct in ("Config", "PadConfig", "MotionConfig"):
             for field in rust_struct_fields(source, struct):
                 with self.subTest(struct=struct, field=field):
-                    self.assertRegex(readme, rf"\b{re.escape(field)}\b")
+                    self.assertRegex(docs, rf"\b{re.escape(field)}\b")
 
     def test_documented_toml_samples_use_config_struct_fields(self):
         source = (ROOT / "driver/src/config.rs").read_text()
@@ -37,9 +60,12 @@ class PublicDocumentationTests(unittest.TestCase):
             "pad": rust_struct_fields(source, "PadConfig"),
             "motion": rust_struct_fields(source, "MotionConfig"),
         }
-        readme = (ROOT / "README.md").read_text()
-        samples = re.findall(r"```toml\s*\n(.*?)\n```", readme, re.DOTALL)
-        self.assertTrue(samples, "README must contain a TOML configuration sample")
+        docs = "\n".join(
+            (ROOT / name).read_text()
+            for name in ("README.md", "ARCHITECTURE.md")
+        )
+        samples = re.findall(r"```toml\s*\n(.*?)\n```", docs, re.DOTALL)
+        self.assertTrue(samples, "Public docs must contain a TOML configuration sample")
 
         for sample_index, text in enumerate(samples):
             parsed = tomllib.loads(text)
@@ -50,8 +76,27 @@ class PublicDocumentationTests(unittest.TestCase):
                         self.assertIn(section, ("pad", "motion"))
                         self.assertTrue(set(values).issubset(allowed[section]))
 
-        self.assertIn("[pad] backend = \"uhid\"", readme)
-        self.assertIn("explicit `uinput` is rejected", readme)
+        architecture = (ROOT / "ARCHITECTURE.md").read_text()
+        self.assertIn("[pad] backend = \"uhid\"", architecture)
+        self.assertIn("explicit `uinput` is rejected", architecture)
+
+    def test_unknown_configuration_keys_are_not_documented(self):
+        source = (ROOT / "driver/src/config.rs").read_text()
+        architecture = (ROOT / "ARCHITECTURE.md").read_text()
+        allowed = rust_struct_fields(source, "Config") - {"pad", "motion"}
+        allowed.update(f"pad.{field}" for field in rust_struct_fields(source, "PadConfig"))
+        allowed.update(f"motion.{field}" for field in rust_struct_fields(source, "MotionConfig"))
+        documented = set(re.findall(r"^\| `([^`]+)` \|", architecture, re.MULTILINE))
+        self.assertTrue(documented)
+        self.assertEqual(documented, allowed)
+
+    def test_architecture_diagrams_use_mermaid(self):
+        architecture = (ROOT / "ARCHITECTURE.md").read_text()
+        diagrams = re.findall(r"```mermaid\s*\n(.*?)\n```", architecture, re.DOTALL)
+        self.assertGreaterEqual(len(diagrams), 2)
+        self.assertTrue(any(diagram.startswith("flowchart ") for diagram in diagrams))
+        self.assertTrue(any(diagram.startswith("stateDiagram-v2") for diagram in diagrams))
+        self.assertNotIn("```text", architecture)
 
     def test_help_and_readme_name_uhid_not_uinput_requirement(self):
         help_text = (ROOT / "driver/src/main.rs").read_text()
@@ -60,7 +105,7 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertIn("/dev/uhid", readme)
         self.assertNotIn("/dev/uinput", help_text)
         self.assertNotIn("/dev/uinput", readme)
-        self.assertIn("explicit `uinput` is rejected", readme)
+        self.assertIn("explicit `uinput` is rejected", (ROOT / "ARCHITECTURE.md").read_text())
 
     def test_license_files_and_release_status_match_manifest(self):
         readme = (ROOT / "README.md").read_text()
@@ -83,22 +128,23 @@ class PublicDocumentationTests(unittest.TestCase):
         source = (ROOT / "driver/src/main.rs").read_text()
         for flag in ("--config", "--help", "--version"):
             self.assertIn(f'"{flag}"', source)
-        readme = (ROOT / "README.md").read_text()
-        self.assertIn("exactly 4 bytes", readme)
-        self.assertIn("11 <left> <right> <duration_ms>", readme)
+        protocol = (ROOT / "VADER3P_PROTOCOL.md").read_text()
+        self.assertIn("exactly 4 bytes", protocol)
+        self.assertIn("11 <left> <right> <duration_ms>", protocol)
         rumble = (ROOT / "driver/src/rumble.rs").read_text()
         self.assertIn("BT_FRAME_LEN: usize = 4", rumble)
 
     def test_motion_limitations_and_steam_visibility_are_explicit(self):
-        readme = (ROOT / "README.md").read_text()
+        readme = re.sub(r"\s+", " ", (ROOT / "README.md").read_text())
         for term in (
-            "fabricated",
-            "unknown third value",
-            "not validate this build",
-            "EVIOCGRAB",
-            "does not remove the device",
+            "experimental",
+            "third gyro component",
+            "have not hardware-retested the current pitch correction",
         ):
             self.assertIn(term, readme)
+        architecture = (ROOT / "ARCHITECTURE.md").read_text()
+        for term in ("fabricated", "third", "EVIOCGRAB", "prevent device enumeration"):
+            self.assertIn(term, architecture)
         self.assertTrue((ROOT / "docs/steam-controller-visibility.md").is_file())
 
     def test_migration_guide_documents_owned_legacy_cleanup_safely(self):

@@ -1,13 +1,19 @@
 # Protocol ledger
 
-Status: **two Bluetooth descriptors and one owner-coordinated A/B/C/Z input
-capture obtained; no output commands tested**. Descriptor/source observations,
+> **Historical ledger:** this document preserves earlier observations, research,
+> and corrections. For the current implementation, use the
+> [Bluetooth protocol reference](../VADER3P_PROTOCOL.md). Status statements below
+> describe the artifacts and dates recorded in this ledger; they do not establish
+> behavior of the current build.
+
+Status: **I have two Bluetooth descriptors and one coordinated A/B/C/Z input
+capture. No output commands were tested at this checkpoint.** Descriptor/source observations,
 sequence-associated button fields, and unknowns remain distinct from a complete
 verified wire specification.
 
 ## First physical observation
 
-Before switching modes, the owner-confirmed Vader exposed Bluetooth
+Before I switched modes, the Vader exposed Bluetooth
 `045e:02e0`, an Xbox-compatible descriptor. Its 306-byte descriptor has SHA-256
 `74a5dbcedf6d6a88f9eb6e66fbeb5a255ba800fd084390cbf325e0c4c74492d7`.
 It advertises standard controls and a rumble-style output report, but no explicit
@@ -21,7 +27,7 @@ upstream DInput lead. Its 163-byte descriptor has SHA-256
 `227924e94560bea5149d6a75a8bb225143a1e4b0685075dea729a30649bc1f22`.
 BlueZ exposes HID-over-GATT and separate writable HID-report/vendor/UART
 characteristics. The HID report map itself advertises input only; this does not
-settle feedback availability. Later owner-authorized read-only access yielded
+settle feedback availability. Later read-only access I authorized yielded
 the partial A/B/C/Z observations below; motion and all output commands remain
 unverified. See [DInput evidence](evidence/bluetooth-dinput-mode.md) and
 [passive report evidence](evidence/passive-dinput-abcz.md).
@@ -34,13 +40,13 @@ it builds a 20-byte payload and sends all 20, and only indices 0–13 are ever
 written, so bytes 15–20 are uninitialised padding rather than hidden data.
 Neither truncate to the descriptor length nor read meaning into the tail.
 
-Offsets include report ID at byte 0. In the owner-completed A/B/C/Z sequence:
+Offsets include report ID at byte 0. In the A/B/C/Z sequence I completed:
 A = byte 9 mask `0x10`; B = byte 9 mask `0x20`; C = byte 11 mask `0x01`;
 Z = byte 11 mask `0x02`. Each had a distinct set/clear pair. These are
 sequence-associated observations, not a general parser or simultaneous-input
 proof. M1–M4, remaining inputs, motion and Steam-editor exposure are unverified.
 
-Six more owner-coordinated passive sessions followed the A/B/C/Z capture.
+Six more passive sessions I coordinated followed the A/B/C/Z capture.
 Consolidated button map (each row confirmed by single-press isolation or a
 coordinated ordered batch; details and session provenance in the passive-capture
 evidence doc):
@@ -72,7 +78,7 @@ requires a vendor-mode output command; untested.
 shared bits. An earlier version of this table listed both on byte 11 and called
 them indistinguishable; that was wrong. Re-analysis of the raw captures:
 
-- Session 5 (owner-confirmed M1–M4 presses, no D-pad) → byte 11
+- Session 5 (M1–M4 presses I confirmed, no D-pad) → byte 11
   `0x04`/`0x08`/`0x10`/`0x20` while byte 9's low nibble stayed `0x00` for all
   25 frames.
 - Session 3 (D-pad only) → byte 9 low nibble `1`/`3`/`5`/`7` while byte 11
@@ -81,7 +87,7 @@ them indistinguishable; that was wrong. Re-analysis of the raw captures:
   105–107 s. No frame anywhere in the seven captures has both fields non-zero.
 
 So the D-pad is a hat in byte 9's low nibble and M1–M4 are discrete bits in
-byte 11. The per-M-key bit order is **owner-confirmed** by an ordered
+byte 11. I confirmed the per-M-key bit order with an ordered
 single-key capture: each key was pressed alone three times in turn, and each
 produced exactly one distinct bit with no overlap.
 

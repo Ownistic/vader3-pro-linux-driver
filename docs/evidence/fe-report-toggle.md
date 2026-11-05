@@ -79,7 +79,7 @@ is pressed, the controller buzzes briefly.
 
 ## Tested on hardware: the chord fires, the Bluetooth stream does not change
 
-Owner tested both chords on the controller, connected over **Bluetooth DInput**:
+I tested both chords on the controller, connected over **Bluetooth DInput**:
 
 | Chord | Rumble acknowledgement | Stream changed? |
 | --- | --- | --- |
