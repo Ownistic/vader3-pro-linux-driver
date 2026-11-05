@@ -38,13 +38,10 @@ jobs:
         run: cargo build --release --locked
 
       - name: Test
-        run: cargo test --locked
+        run: cargo test --locked --all-targets
 
-      # Scoped to shipped code. The diagnostic probes under examples/ resolve SDL
-      # symbols through dlopen and therefore use transmute deliberately; see
-      # driver/examples/.clippy-note.md.
       - name: Clippy
-        run: cargo clippy --locked --lib --bins --tests -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Format
         run: cargo fmt --check
@@ -59,13 +56,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install pytest
-        run: pip install pytest
-
       # These run against recorded fixtures and need no controller, so they are
       # safe and meaningful in CI.
       - name: Tests
-        run: python -m pytest tests/ -q
+        run: python3 -m unittest discover -s tests -v
 
       - name: Inventory tool help
         run: python tools/inventory.py --help

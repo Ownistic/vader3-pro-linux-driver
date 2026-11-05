@@ -1,5 +1,15 @@
 # Bluetooth DInput rumble: solved
 
+> **Static attribution correction:** `FUN_00010838` does not write the GATT
+> payload buffer in the saved corrected decompilation. It examines configured
+> input mappings and calls the rumble primitive. Subsequent instruction-level
+> analysis identified the producer at `0x10960` and its Nordic UART attribute
+> callback at `0x8b0c`; see [BLE callback trace](ble-attribute-callback-static.md).
+> Also, the
+> installed firmware version on the tested controller was not independently
+> established. The owner's recorded vibration observations are unchanged.
+> See [receive-path follow-up](staged-frame-transport-static.md).
+
 Rumble over Bluetooth DInput works on stock firmware 6.7.5.1 with no
 modification. This document records the command, the firmware path that
 implements it, the hardware evidence, and the corrections to earlier

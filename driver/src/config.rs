@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::device;
@@ -24,20 +24,68 @@ pub struct Config {
     /// Required for Bluetooth rumble: the NUS characteristic is reached through
     /// BlueZ by device path, and there is no hidraw route.
     pub bluetooth_address: Option<String>,
-    /// Poll interval in milliseconds when idle.
-    ///
-    /// The controller is edge-triggered, so an idle poll costs one non-blocking
-    /// read. 4 ms keeps latency low without busy-waiting.
+    /// Compatibility-only setting; the UHID runtime does not use this value.
     pub poll_ms: u64,
-    /// Hide the physical controller's evdev nodes so it does not appear as a
-    /// duplicate gamepad alongside the virtual one.
+    /// Grab physical evdev nodes to block their event delivery to other readers.
     ///
     /// Uses `EVIOCGRAB`, which the kernel releases automatically when this
     /// process exits, so a crash cannot leave the controller unavailable. It
     /// still reads the controller through hidraw, which is a separate interface.
+    /// The grab does not prevent device enumeration or hidraw access.
     pub suppress_physical: bool,
     /// Log level: `error`, `warn`, `info`, `debug` or `trace`.
     pub log_level: String,
+    pub pad: PadConfig,
+    pub motion: MotionConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Backend {
+    #[default]
+    Uhid,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PadConfig {
+    pub backend: Backend,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MotionConfig {
+    pub enabled: bool,
+    pub scale: i16,
+    pub stale_ms: u64,
+    pub swap_xy: bool,
+    pub invert_x: bool,
+    pub invert_y: bool,
+}
+
+impl MotionConfig {
+    /// Multipliers applied after axis selection, with axis inversion in i32.
+    #[must_use]
+    pub fn axis_scales(&self) -> [i32; 2] {
+        let scale = i32::from(self.scale);
+        [
+            if self.invert_x { -scale } else { scale },
+            if self.invert_y { -scale } else { scale },
+        ]
+    }
+}
+
+impl Default for MotionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            scale: 1,
+            stale_ms: 100,
+            swap_xy: true,
+            invert_x: true,
+            invert_y: true,
+        }
+    }
 }
 
 impl Default for Config {
@@ -45,12 +93,14 @@ impl Default for Config {
         Self {
             vendor_id: device::VENDOR_ID,
             product_id: device::PRODUCT_ID,
-            virtual_name: "Flydigi Vader 3 Pro (translated)".to_string(),
+            virtual_name: "Flydigi Vader 3 Pro (UHID DualSense Edge)".to_string(),
             rumble: true,
             bluetooth_address: None,
             suppress_physical: true,
             poll_ms: 4,
             log_level: "info".to_string(),
+            pad: PadConfig::default(),
+            motion: MotionConfig::default(),
         }
     }
 }
@@ -60,7 +110,33 @@ impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let text =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+        let cfg: Self =
+            toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Check cross-field constraints before opening devices or starting workers.
+    pub fn validate(&self) -> Result<()> {
+        if !(1..=1000).contains(&self.motion.stale_ms) {
+            bail!("motion.stale_ms must be in 1..=1000");
+        }
+        if self.motion.enabled && self.motion.scale == 0 {
+            bail!("motion.scale must be nonzero when motion is enabled");
+        }
+        if self.rumble || self.motion.enabled {
+            let valid = self.bluetooth_address.as_deref().is_some_and(|addr| {
+                let parts: Vec<_> = addr.split(':').collect();
+                parts.len() == 6
+                    && parts
+                        .iter()
+                        .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
+            });
+            if !valid {
+                bail!("uhid motion or rumble requires a valid bluetooth_address");
+            }
+        }
+        Ok(())
     }
 
     /// Load the given path if it exists, else return defaults.
@@ -69,7 +145,9 @@ impl Config {
     /// to defaults. Without this, a config written where the documentation says to
     /// put it would be silently ignored and rumble would quietly stay off.
     pub fn load_or_default(path: Option<&Path>) -> Result<Self> {
-        Self::load_resolved(path, &Self::default_path())
+        let cfg = Self::load_resolved(path, &Self::default_path())?;
+        cfg.validate()?;
+        Ok(cfg)
     }
 
     fn load_resolved(explicit: Option<&Path>, default: &Path) -> Result<Self> {
@@ -102,6 +180,79 @@ mod tests {
         assert_eq!(c.vendor_id, 0xd7d7);
         assert_eq!(c.product_id, 0x0041);
         assert!(c.rumble);
+        assert_eq!(c.pad.backend, Backend::Uhid);
+        assert!(!c.motion.enabled);
+        assert_eq!((c.motion.scale, c.motion.stale_ms), (1, 100));
+        assert!(c.motion.swap_xy);
+        assert!(c.motion.invert_x);
+        assert!(c.motion.invert_y);
+        assert_eq!(c.motion.axis_scales(), [-1, -1]);
+        assert!(c.validate().is_err()); // Rumble requires an address.
+    }
+
+    #[test]
+    fn backend_and_motion_validation() {
+        assert!(toml::from_str::<Config>("[pad]\nbackend = 'unknown'").is_err());
+        assert!(toml::from_str::<Config>("[pad]\nbackend = 'uinput'").is_err());
+        let compatible: Config = toml::from_str("rumble = false\n[pad]\nbackend = 'uhid'").unwrap();
+        assert_eq!(compatible.pad.backend, Backend::Uhid);
+        assert!(compatible.validate().is_ok());
+        let mut c: Config =
+            toml::from_str("rumble = false\npoll_ms = 8\n[motion]\nenabled = true").unwrap();
+        assert_eq!(c.poll_ms, 8);
+        assert!(!c.rumble);
+        assert!(c.motion.swap_xy);
+        assert!(c.motion.invert_x);
+        let override_cfg: Config = toml::from_str("[motion]\nswap_xy = false").unwrap();
+        assert!(!override_cfg.motion.swap_xy);
+        assert!(override_cfg.motion.invert_x);
+        let mut motion = MotionConfig {
+            scale: i16::MIN,
+            ..MotionConfig::default()
+        };
+        assert_eq!(motion.axis_scales(), [32768, 32768]);
+        motion.invert_y = false;
+        assert_eq!(motion.axis_scales(), [32768, -32768]);
+        motion.invert_x = false;
+        assert_eq!(motion.axis_scales(), [-32768, -32768]);
+        assert!(c.validate().is_err());
+        c.bluetooth_address = Some("AA:BB:CC:DD:EE:FF".into());
+        assert!(c.validate().is_ok());
+        c.motion.scale = 0;
+        assert!(c.validate().is_err());
+        c.motion.scale = -1;
+        for value in [0, 1001] {
+            c.motion.stale_ms = value;
+            assert!(c.validate().is_err());
+        }
+        for value in [1, 1000] {
+            c.motion.stale_ms = value;
+            assert!(c.validate().is_ok());
+        }
+        c.bluetooth_address = Some("AA:BB:CC:DD:EE:GG".into());
+        assert!(c.validate().is_err());
+        c.motion.enabled = false;
+        c.rumble = false;
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn load_rejects_invalid_cross_field_configuration() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), "[motion]\nenabled = true\n").unwrap();
+        assert!(Config::load(file.path()).is_err());
+    }
+
+    #[test]
+    fn load_accepts_uhid_and_rejects_removed_backend() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), "rumble = false\n[pad]\nbackend = 'uhid'\n").unwrap();
+        assert_eq!(
+            Config::load(file.path()).unwrap().pad.backend,
+            Backend::Uhid
+        );
+        std::fs::write(file.path(), "rumble = false\n[pad]\nbackend = 'uinput'\n").unwrap();
+        assert!(Config::load(file.path()).is_err());
     }
 
     #[test]

@@ -1,5 +1,20 @@
 # The motion report has a controller-side toggle
 
+> **Correction:** `FUN_00011c44` writes `0xfe` at offset 9 of the same buffer
+> that `FUN_00011984` passes to the settings-write path, not a buffer proven to
+> be a USB report. Literal-pool entries `0x11c74` and `0x119ac` both resolve to
+> `0x0084730c`. The claim below that the chord selects report `0xFE` on USB is
+> unverified; no wired chord capture is documented here. The `0x96` flag and
+> the `0x2a` flag set by `0xEE` are distinct fields and their equivalence is
+> not established. The recorded Bluetooth chord and report observations remain
+> observations, but rumble alone does not prove which state write occurred.
+> `FUN_00009d20` reads the `0x96` flag when normalizing four analog channels;
+> this supports an effect on control scaling, not a demonstrated motion toggle.
+> See [static subsystem traces](static-subsystems-2026-11-04.md). A separate
+> static path connects two sensor-state words to a Nordic UART
+> notification-shaped builder; the recorded HID captures do not establish
+> whether that separate characteristic delivered those values.
+
 While deriving the vendor report layout, the builder that emits report id `0xFE`
 turned out to have a caller outside the vendor-command path. That matters more
 than the layout.
