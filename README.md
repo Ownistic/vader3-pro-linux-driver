@@ -1,6 +1,6 @@
 # Flydigi Vader 3 Pro for Linux
 
-This pre-1.0 daemon translates connected Vader 3 Pro controllers in Bluetooth
+This experimental daemon translates connected Vader 3 Pro controllers in Bluetooth
 DInput mode into separate virtual DualSense Edge controllers through Linux UHID.
 It targets Linux systems with the `hid-playstation` driver. Physical USB and the
 2.4 GHz dongle are not supported.
@@ -19,8 +19,8 @@ It targets Linux systems with the `hid-playstation` driver. Physical USB and the
 - A lost controller's virtual pad is removed and recreated with the same identity
   after reconnect. Hardware reconnect behavior still needs acceptance testing.
 
-In my earlier v4 Steam test, all controls worked except gyro Z. That observation
-applies to the tested v4 artifact, not automatically to this build. I have not
+In an earlier Steam test, all controls worked except gyro Z. That observation
+applies to the tested build, not automatically to the current build. I have not
 hardware-retested the current pitch correction. The third gyro component is not
 available in the implemented motion input, and the virtual acceleration values
 are fabricated rather than measured. Calibration and motion remain experimental.
@@ -45,8 +45,9 @@ The installer downloads the release binary and its SHA-256 checksum from GitHub,
 verifies the checksum, and installs `~/.local/bin/vader3p-steam`. The checksum
 detects download corruption; it is not an independent signature. Review a script
 before piping it to a shell. The command requires `curl`, GNU coreutils, a
-published release, glibc 2.35 or later, and the D-Bus runtime library. Before the
-first release is published, the download fails. It does not install packages, grant device access,
+published release and the D-Bus runtime library. See the
+[compatibility requirements](driver/README.md#compatibility-requirements) for
+supported system libraries. It does not install packages, grant device access,
 pair controllers, change configuration, or start or enable a service.
 
 The installer refuses to replace an existing executable by default. If you are
@@ -62,16 +63,16 @@ Continue with [device access](#device-access) and [configuration](#configure-and
 before starting the daemon. Device permissions may need to be granted again after
 reconnection.
 
-Maintainers publish binaries by pushing a version tag matching the version in
-`driver/Cargo.toml`, such as `v0.1.0`. The release workflow builds and tests on
-Ubuntu 22.04, then publishes the binary and checksum. The installer always uses
+Maintainers publish binaries by pushing a tag matching the package version in
+`driver/Cargo.toml`. The release workflow builds and tests on Ubuntu, then
+publishes the binary and checksum. The installer always uses
 the latest non-prerelease GitHub release.
 
 ### Build from source
 
 Prerequisites:
 
-- Rust 1.75 or later and `cargo`
+- Rust and `cargo`; see the [compatibility requirements](driver/README.md#compatibility-requirements)
 - `pkg-config`, BlueZ and D-Bus development headers (`libdbus-1-dev` on
   Debian/Ubuntu or `dbus-devel` on Fedora)
 - Linux kernel support for `/dev/uhid` and `hid-playstation`
@@ -178,6 +179,19 @@ does not reset the selector. See [architecture](ARCHITECTURE.md) for details.
 - [Testing guide](docs/TESTING.md)
 - [Migration from the former uinput setup](docs/uhid-migration.md)
 - [Manual Steam visibility setting](docs/steam-controller-visibility.md)
+
+## Disclaimer
+
+This software sends Bluetooth commands to your controller, including commands
+for rumble and experimental motion. Use it at your own risk. Unexpected
+behavior, loss of functionality, or other damage may occur. Motion mode can
+change a controller setting that the daemon does not restore on exit; a full
+power cycle and reconnect may be needed to restore ordinary input.
+
+The software is provided **as is**, without warranties. To the extent permitted
+by applicable law, the authors and contributors are not liable for damages
+arising from its use. See the license terms for the full disclaimer and
+limitations of liability.
 
 ## License
 

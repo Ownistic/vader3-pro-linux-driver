@@ -5,6 +5,12 @@ limitations and Steam visibility. This daemon supports Bluetooth DInput and
 presents one independent Bluetooth DualSense Edge UHID device for each
 eligible connected controller.
 
+## Compatibility requirements
+
+The daemon is pre-1.0. Source builds require Rust 1.75 or later. The published
+x86-64 Linux binary is built on Ubuntu 22.04 and requires glibc 2.35 or later
+and the D-Bus runtime library.
+
 ## Layout
 
 - `config.rs`: settings, compatibility selector and validation.

@@ -135,7 +135,7 @@ class PublicDocumentationTests(unittest.TestCase):
         if declaration is None:
             self.fail("Cargo.toml must declare the package license")
         self.assertEqual(declaration.group(1), "MIT OR Apache-2.0")
-        self.assertIn("pre-1.0", readme[:1500])
+        self.assertIn("pre-1.0", (ROOT / "driver/README.md").read_text())
         for name in ("LICENSE-MIT", "LICENSE-APACHE"):
             self.assertIn(name, readme)
             self.assertTrue((ROOT / name).is_file())
