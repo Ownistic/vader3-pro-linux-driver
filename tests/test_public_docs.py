@@ -160,7 +160,8 @@ class PublicDocumentationTests(unittest.TestCase):
         for term in (
             "experimental",
             "third gyro component",
-            "have not hardware-retested the current pitch correction",
+            "Gyro Z (roll) does not work",
+            "have not been hardware-tested",
         ):
             self.assertIn(term, readme)
         architecture = (ROOT / "ARCHITECTURE.md").read_text()

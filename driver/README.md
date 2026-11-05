@@ -11,6 +11,10 @@ The daemon is pre-1.0. Source builds require Rust 1.75 or later. The published
 x86-64 Linux binary is built on Ubuntu 22.04 and requires glibc 2.35 or later
 and the D-Bus runtime library.
 
+Maintainers publish a release by pushing a tag matching the package version in
+`Cargo.toml`. The release workflow builds and tests the binary, then publishes
+it with a checksum.
+
 ## Layout
 
 - `config.rs`: settings, compatibility selector and validation.
