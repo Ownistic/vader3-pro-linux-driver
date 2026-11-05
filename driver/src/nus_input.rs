@@ -1,6 +1,5 @@
-//! Ordinary controls in a NUS data notification. Layout: docs/evidence/nus-input-prefix-static.md.
-//! Physical X and Y labels override the original static inference based on the
-//! owner-coordinated live observations recorded in that document.
+//! Ordinary controls in a NUS data notification.
+//! Physical X and Y labels follow live input observations.
 use crate::input::{button, State};
 use crate::motion;
 

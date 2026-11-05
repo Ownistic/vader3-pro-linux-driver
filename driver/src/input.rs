@@ -6,8 +6,8 @@
 //! all 20, so bytes 15-20 are uninitialised padding. Never truncate to the
 //! descriptor length and never interpret the tail.
 //!
-//! Byte map, established from owner-coordinated passive captures and crossed
-//! against the firmware's own key table (see `docs/PROTOCOL.md`):
+//! Byte map established from passive captures and checked against the firmware
+//! key table:
 //!
 //! | Offset | Meaning |
 //! | --- | --- |
@@ -221,7 +221,7 @@ pub fn parse(report: &[u8]) -> Result<State, ParseError> {
     if b12 & 0x80 != 0 {
         buttons |= 1 << button::HOME;
     }
-    // HID FN position is a static correlation; see docs/evidence/fn-button-static.md.
+    // HID FN position follows a static correlation with the firmware key table.
     if b11 & 0x80 != 0 {
         buttons |= 1 << button::FN;
     }

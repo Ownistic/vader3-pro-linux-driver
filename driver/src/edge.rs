@@ -1,7 +1,6 @@
 //! Virtual DualSense Edge USB control plane over Linux UHID.
 //!
-//! The descriptor is the independently authored descriptor used by the Steam
-//! compatibility spike in `docs/evidence/uhid-dualsense-probe.md`.
+//! The descriptor provides a USB-shaped report layout to the virtual UHID device.
 
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};

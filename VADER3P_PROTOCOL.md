@@ -51,11 +51,10 @@ produce unsigned `0`–`255` values. It does not apply a stick deadzone or calib
 the center. The decoder accepts only the observed cardinal HID hat values; it
 does not infer undocumented diagonal values.
 
-The [historical captures](docs/evidence/passive-dinput-abcz.md) record physical
-button checks and resting values. Captures, firmware interpretation and parser
-behavior are different forms of evidence.
-FN at HID byte 11 mask `80` is a [static correlation](docs/evidence/fn-button-static.md),
-not an ordinary HID hardware capture. Byte 12 mask `01` is not FN and is ignored.
+Physical button checks and resting values informed this layout. Captures,
+firmware interpretation and parser behavior are different forms of evidence.
+FN at HID byte 11 mask `80` is a static correlation, not an ordinary HID hardware
+capture. Byte 12 mask `01` is not FN and is ignored.
 
 ## NUS input and motion
 
@@ -86,11 +85,9 @@ The input decoder subtracts `80` modulo 256 from each stick byte to produce the
 same canonical representation as ordinary HID. Analog trigger levels are used
 directly. D-pad directions are independent bits in this format.
 
-Physical X is byte 4 bit 7; Y is byte 5 bit 0. My passive button checks corrected
-an earlier swapped labeling. See the
-[NUS input evidence](docs/evidence/nus-input-prefix-static.md).
-My [FN capture](docs/evidence/fn-button-capture.md) observed byte 8 mask `01`;
-byte 9 mask `40` is ignored and does not represent FN.
+Physical X is byte 4 bit 7; Y is byte 5 bit 0. Button checks corrected an earlier
+swapped labeling. The observed FN bit is byte 8 mask `01`; byte 9 mask `40` is
+ignored and does not represent FN.
 
 ### Motion packing
 
@@ -109,10 +106,9 @@ Scaling saturates to signed 16-bit values.
 The third gyro component is zero. Virtual acceleration and calibration values
 are fabricated, not physical measurements.
 
-The inspected Android app decodes bytes 14–17 as cursor-related values and a
+One inspected Android app decodes bytes 14–17 as cursor-related values and a
 validity flag. That finding does not prove that every Bluetooth path or firmware
-lacks a third component. See the
-[bounded app analysis](docs/evidence/bluetooth-third-motion-app-static.md).
+lacks a third component.
 
 ## Motion selector and status
 
@@ -138,9 +134,7 @@ NUS stream on firmware 6.7.5.1. If returning to ordinary HID or native input,
 power-cycle and reconnect before checking input. This is a recovery observation,
 not a persistence guarantee for other firmware.
 
-See [ble_worker.rs](driver/src/ble_worker.rs), the
-[activation evidence](docs/evidence/uhid-emulation-2026-11-04.md), and
-[NUS firmware findings](docs/evidence/nus-input-prefix-static.md).
+See [ble_worker.rs](driver/src/ble_worker.rs) for the implementation.
 
 ## Bluetooth rumble
 
@@ -161,8 +155,8 @@ every 100 ms. New feedback can cause earlier writes.
 
 The stop frame retains a nonzero duration. Repeated nonzero commands extend the
 effect. A transport success does not prove that motors moved or stopped.
-See [rumble.rs](driver/src/rumble.rs) and the
-[physical rumble evidence](docs/evidence/bluetooth-rumble-solved.md).
+See [rumble.rs](driver/src/rumble.rs) for the implementation. Physical motor
+behavior is not established by the packet format or a successful write.
 
 ## Virtual DualSense Edge boundary
 
@@ -171,9 +165,7 @@ ID `01`. FN triggers an experimental PS-only, PS + Cross, PS-only, release
 sequence, with minimum durations 100, 60 and 40 ms for the first three phases.
 PS (byte 10 mask `01`) and Cross (byte 8 mask `20`) are OR-composed with
 physical Home and A. The sequence targets Steam's Guide + A Quick Access
-shortcut. I verified a short tap and a two-second hold opening the sidebar
-without game launch or the main-menu popup on the
-[recorded candidate](docs/evidence/fn-quick-access-runtime.md).
+shortcut.
 The six extra buttons remain independent. Extra
 buttons occupy byte 10: C `02`, Z `04`, M1 `10`, M2 `20`, M3 `40`, M4 `80`.
 Gyro X/Y occupy bytes 16–19 as little-endian signed 16-bit values; gyro Z is zero.
@@ -183,14 +175,9 @@ at length 48 or 63. Rumble-valid flags are byte 1 bit 0 or byte 39 bit 2. Left
 motor level comes from byte 4 and right from byte 3, scaled from `0`–`255` to
 `0`–`250`. Unrelated host output is not forwarded as a physical command.
 
-## Evidence and limits
+## Limits
 
-These layouts describe the current implementation. My earlier hardware tests
-apply to the artifacts identified in the linked evidence, not automatically to
-the cleaned build or its pitch correction. Current acceptance gaps are listed
-in [testing](docs/TESTING.md).
-
-The [protocol ledger](docs/PROTOCOL.md) retains historical observations,
-corrections and research into other modes. USB reference captures are research,
-not a supported product transport. This document is not authorization to send
-uncharacterized commands or change firmware.
+These layouts describe the current implementation. Earlier hardware observations
+do not establish behavior for this build or its pitch correction. USB reference
+captures are not a supported product transport. This document does not authorize
+uncharacterized commands or firmware changes.

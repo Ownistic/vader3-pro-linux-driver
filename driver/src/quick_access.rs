@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::input::{button, State};
 
-// Proposed timings from docs/evidence/fn-quick-access-runtime.md; not hardware validated.
+// Phase durations are minimum report intervals, not measured end-to-end latency.
 const GUIDE_LEAD: Duration = Duration::from_millis(100);
 const CHORD: Duration = Duration::from_millis(60);
 const GUIDE_TAIL: Duration = Duration::from_millis(40);

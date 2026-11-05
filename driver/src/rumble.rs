@@ -1,4 +1,4 @@
-//! Bluetooth Nordic UART rumble frames; see docs/evidence/bluetooth-rumble-solved.md.
+//! Bluetooth Nordic UART rumble frames.
 
 pub const BT_FRAME_LEN: usize = 4;
 pub const BT_DURATION_MS: u8 = 200;

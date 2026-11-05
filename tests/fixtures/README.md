@@ -1,17 +1,14 @@
 # HID regression fixtures
 
-The `vader3pro-bluetooth-{xbox,dinput}-descriptor.json` files are real sysfs
-descriptors captured before and after I switched Bluetooth modes. They are
-**not input-report captures**, and do not establish button mapping,
-motion, feedback, or Steam support. See
-[Xbox-mode evidence](../../docs/evidence/bluetooth-xbox-mode.md) and
-[DInput evidence](../../docs/evidence/bluetooth-dinput-mode.md).
+The `vader3pro-bluetooth-{xbox,dinput}-descriptor.json` files are sysfs
+descriptors captured in the corresponding Bluetooth modes. They are **not
+input-report captures**, and do not establish button mapping, motion, feedback,
+or Steam support.
 
-`vader3pro-bluetooth-dinput-abcz.json` preserves all 14 reports from the first
-my coordinated A/B/C/Z input capture. It records real 21-byte report-ID-1
-packets even though the descriptor declares 15 bytes including ID. Associated
-button meanings follow the sequence I completed, not video or
-simultaneous-input testing. See [capture evidence](../../docs/evidence/passive-dinput-abcz.md).
+`vader3pro-bluetooth-dinput-abcz.json` preserves 14 reports from a coordinated
+A/B/C/Z input capture. It records 21-byte report-ID-1 packets even though the
+descriptor declares 15 bytes including ID. Associated button meanings follow the
+capture sequence, not video or simultaneous-input testing.
 Do not label synthetic bytes as recorded input or equate these fixture checks
 with working Steam support.
 

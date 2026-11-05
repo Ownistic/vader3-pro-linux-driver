@@ -9,8 +9,7 @@ virtual DualSense Edge through Linux UHID. It targets Linux systems with the
 - Sticks, analog triggers, D-pad and standard buttons.
 - Six independent extra buttons: C, Z and M1–M4.
 - FN opens Steam's Quick Access Menu (the sidebar containing Decky) using an
-  ordered Guide + A pulse. I verified short taps and holds without game launch;
-  see the [runtime evidence](docs/evidence/fn-quick-access-runtime.md).
+  ordered Guide + A pulse.
 - Rumble feedback forwarded over Bluetooth.
 - Experimental motion input maps two uncalibrated components to pitch and yaw.
 - The virtual controller remains available across physical disconnects; reconnect
@@ -117,10 +116,9 @@ does not reset the selector. See [architecture](ARCHITECTURE.md) for details.
 
 - [Architecture and configuration reference](ARCHITECTURE.md)
 - [Bluetooth protocol reference](VADER3P_PROTOCOL.md)
-- [Testing and current acceptance gaps](docs/TESTING.md)
+- [Testing guide](docs/TESTING.md)
 - [Migration from the former uinput setup](docs/uhid-migration.md)
 - [Manual Steam visibility setting](docs/steam-controller-visibility.md)
-- [Historical protocol ledger](docs/PROTOCOL.md)
 
 ## License
 

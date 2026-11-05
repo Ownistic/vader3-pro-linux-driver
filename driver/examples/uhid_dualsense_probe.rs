@@ -1,4 +1,4 @@
-//! Disposable synthetic DualSense Edge UHID experiment; see docs/evidence/uhid-dualsense-probe.md.
+//! Disposable synthetic DualSense Edge UHID experiment.
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::fd::AsRawFd;

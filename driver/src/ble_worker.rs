@@ -169,7 +169,7 @@ impl State {
             self.sample = Some((generation, raw, input, Instant::now()));
             self.diagnostics.activation = ActivationState::ObservedData;
         } else if data.len() == 20 && data.starts_with(&[0xac, 0xc0]) {
-            // Status format observed in docs/HANDOFF.md, UHID spike checkpoint.
+            // A 20-byte status frame starts with AC C0; byte 10 holds selector status.
             self.diagnostics.selector_status = Some(data[10]);
             if data[10] == 1 && self.activation_write_attempted {
                 self.diagnostics.activation = ActivationState::ObservedSelector;

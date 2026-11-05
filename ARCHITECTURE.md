@@ -88,11 +88,6 @@ release. Each transition waits for a report; a short valid tap completes, while
 invalid input or lifecycle cancellation stops the pulse. The host must be open
 and started, and FN must be released before rearming. Synthetic controls are
 OR-composed with physical Home and A; C, Z and M1–M4 retain their mappings.
-I verified a short tap and a two-second hold in Steam Game Mode with a game
-highlighted: the sidebar opened without launching it, repeating or opening the
-main menu. This applies to the artifact in the
-[FN runtime record](docs/evidence/fn-quick-access-runtime.md), not every firmware
-or Steam version.
 
 The main loop drains available physical reports and services host events. It
 sends virtual reports on changed input and at a fixed 4 ms interval while UHID
@@ -118,9 +113,9 @@ presented to the virtual device are fabricated, not measured.
 
 The daemon does not restore the selector on exit. If ordinary HID input is
 absent after disabling motion, fully power-cycle and reconnect the controller.
-That recovery cleared the stream in my recorded firmware 6.7.5.1 test. Restarting
-Steam alone does not reset the selector. See the
-[activation evidence](docs/evidence/uhid-emulation-2026-11-04.md).
+Restarting Steam alone does not reset the selector. A full power cycle and
+reconnect cleared the stream in my test on firmware 6.7.5.1; other firmware may
+behave differently.
 
 ## BlueZ trust boundary
 
@@ -210,14 +205,9 @@ existing file is an error.
 | `motion.invert_x` | `true` | Invert X/pitch after axis selection, independently of yaw. |
 | `motion.invert_y` | `true` | Invert Y/yaw after axis selection, independently of pitch. |
 
-## Validation
+## Validation limits
 
-The code implements these paths, but unit tests do not establish hardware
-behavior. My earlier v4 tests and their artifact identity are recorded in the
-[runtime evidence](docs/evidence/uhid-runtime-retest-2026-11-04.md). I also verified
-the current FN shortcut on the [recorded sequenced build](docs/evidence/fn-quick-access-runtime.md).
-That targeted test does not close full-build acceptance or verify the independent
-pitch correction.
-
-The [testing guide](docs/TESTING.md) lists current acceptance gaps, including
-calibration, physical rumble, repeated reconnects and latency.
+Unit tests check software behavior but do not establish hardware behavior. A
+targeted FN shortcut check does not establish full-build acceptance or verify the
+independent pitch correction. The [testing guide](docs/TESTING.md) describes the
+checks available to contributors.
